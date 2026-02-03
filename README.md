@@ -2,6 +2,40 @@
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
+## Nomadtable MVP (карта + ивенты + чат)
+
+### Карта 2ГИС
+- Вкладка **Карта** показывает 2ГИС Бишкек внутри приложения через `WebView`.
+
+### Ивенты + чат (сейчас локально для 1 пользователя)
+Сейчас ивенты и сообщения **сохраняются локально** (AsyncStorage) — удобно, пока мы не сделали выбор точки на карте и не включили “мультипользовательский” режим.
+
+### Ивенты + чат (видно другим пользователям) — позже
+Когда будем готовы, подключим бэкенд. В проект уже добавлен **Supabase** (самый быстрый MVP).
+
+#### 1) Supabase: создать таблицы
+- Создай проект в Supabase
+- Открой **SQL Editor** и выполни `supabase/schema.sql`
+- Открой **Project Settings → API** и скопируй:
+  - `Project URL`
+  - `anon public key`
+
+#### 2) Expo env
+Создай файл `.env` в корне проекта:
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL=...
+EXPO_PUBLIC_SUPABASE_ANON_KEY=...
+```
+
+Перезапусти dev-сервер после изменения `.env`.
+
+#### Что уже сделано в приложении
+- Вкладка **Ивенты**: список ивентов из Supabase + кнопка **Создать**
+- Экран **деталей ивента**: чат с временем сообщений + realtime обновления
+
+> Важно: для Supabase-MVP в `schema.sql` разрешены insert/select всем (anon). Для продакшена нужно добавить auth и нормальные RLS правила.
+
 ## Get started
 
 1. Install dependencies

@@ -9,6 +9,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 export default function TabLayout() {
   const colorScheme = useColorScheme();
 
+  // Auth check is handled in app/_layout.tsx to avoid conflicts
+
   return (
     <Tabs
       screenOptions={{
@@ -19,15 +21,37 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'Карта',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="map.circle.fill" color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Ивенты',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="calendar.badge.plus" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="chats"
+        options={{
+          title: 'Чаты',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="bubble.left.and.bubble.right.fill" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Профиль',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="person.crop.circle.fill" color={color} />
+          ),
         }}
       />
     </Tabs>

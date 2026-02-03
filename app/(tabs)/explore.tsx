@@ -1,112 +1,257 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Link, useFocusEffect } from 'expo-router';
+import React from 'react';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { listEvents, type LocalEvent } from '@/lib/local-events';
 
-export default function TabTwoScreen() {
+export default function EventsScreen() {
+  const insets = useSafeAreaInsets();
+  const [events, setEvents] = React.useState<LocalEvent[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const rows = await listEvents();
+      setEvents(rows);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка загрузки');
+    }
+    setLoading(false);
+  }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void load();
+    }, [load])
+  );
+
+  function formatDate(dateString: string): string {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Только что';
+    if (diffMins < 60) return `${diffMins} мин назад`;
+    if (diffHours < 24) return `${diffHours} ч назад`;
+    if (diffDays < 7) return `${diffDays} дн назад`;
+    return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
+    <View style={[styles.container, { paddingTop: 16 + insets.top }]}>
+      <View style={styles.header}>
+        <ThemedText type="title" style={styles.headerTitle}>
+          Ивенты
         </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
+        <Link href="/create-event" asChild>
+          <Pressable style={styles.createButton}>
+            <ThemedText type="defaultSemiBold" style={styles.createButtonText}>
+              + Создать
             </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+          </Pressable>
+        </Link>
+      </View>
+
+      {error ? (
+        <View style={styles.errorCard}>
+          <ThemedText style={styles.errorText}>Ошибка: {error}</ThemedText>
+        </View>
+      ) : null}
+
+      <FlatList
+        data={events}
+        keyExtractor={(e) => e.id}
+        onRefresh={load}
+        refreshing={loading}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          !loading ? (
+            <View style={styles.emptyCard}>
+              <ThemedText style={styles.emptyText}>Пока нет ивентов</ThemedText>
+              <ThemedText style={styles.emptySubtext}>Создайте первый ивент, чтобы начать!</ThemedText>
+            </View>
+          ) : (
+            <View />
+          )
+        }
+        renderItem={({ item }) => (
+          <Link href={{ pathname: '/event/[id]', params: { id: item.id } }} asChild>
+            <Pressable style={styles.card}>
+              <View style={styles.cardHeader}>
+                <ThemedText type="title" style={styles.cardTitle}>
+                  {item.title}
+                </ThemedText>
+                <ThemedText style={styles.cardTime}>{formatDate(item.created_at)}</ThemedText>
+              </View>
+
+              {item.description ? (
+                <ThemedText style={styles.cardDescription} numberOfLines={2}>
+                  {item.description}
+                </ThemedText>
+              ) : null}
+
+              {item.meeting_place ? (
+                <View style={styles.locationRow}>
+                  <ThemedText style={styles.locationEmoji}>📍</ThemedText>
+                  <ThemedText type="defaultSemiBold" style={styles.locationText}>
+                    {item.meeting_place}
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              <View style={styles.cardFooter}>
+                <Pressable style={styles.detailsButton}>
+                  <ThemedText type="defaultSemiBold" style={styles.detailsButtonText}>
+                    Подробнее →
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Link>
+        )}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    flex: 1,
+    backgroundColor: '#FFF5F0', // Warm peach background
   },
-  titleContainer: {
+  header: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  headerTitle: {
+    fontSize: 28,
+    color: '#2D1B3D',
+  },
+  createButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#FF9F66', // Accent color
+    shadowColor: '#FF9F66',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  createButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+  },
+  errorCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#FFE5D4',
+  },
+  errorText: {
+    color: '#FF6B35',
+    fontSize: 13,
+  },
+  listContent: {
+    padding: 16,
+    gap: 16,
+    paddingBottom: 40,
+  },
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
     gap: 8,
+    shadowColor: '#FF9F66',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#2D1B3D',
+    fontWeight: '600',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#8B7A9B',
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#FF9F66',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    gap: 12,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  cardTitle: {
+    flex: 1,
+    fontSize: 20,
+    color: '#2D1B3D',
+  },
+  cardTime: {
+    fontSize: 12,
+    color: '#8B7A9B',
+    marginTop: 2,
+  },
+  cardDescription: {
+    fontSize: 15,
+    color: '#4A3A5A',
+    lineHeight: 20,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#FFF0E6',
+  },
+  locationEmoji: {
+    fontSize: 16,
+  },
+  locationText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#FF6B35',
+  },
+  cardFooter: {
+    marginTop: 4,
+  },
+  detailsButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: '#FF9F66', // Accent color
+  },
+  detailsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
   },
 });
