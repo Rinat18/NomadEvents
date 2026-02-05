@@ -4,9 +4,9 @@ import { Image, Pressable, SectionList, StyleSheet, Text, View } from 'react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { getOrCreateLocalUserId } from '@/lib/local-user';
-import { listEvents, listMessages, type LocalEvent, type LocalMessage } from '@/lib/local-events';
 import { listDMChats, type DMChat } from '@/lib/local-dms';
+import { listEvents, listMessages, type LocalEvent, type LocalMessage } from '@/lib/local-events';
+import { getOrCreateLocalUserId } from '@/lib/local-user';
 
 type ChatEvent = {
   event: LocalEvent;
@@ -160,7 +160,7 @@ export default function ChatsScreen() {
           }}
           onRefresh={load}
           refreshing={loading}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 24 + insets.bottom }]}
           showsVerticalScrollIndicator={false}
           stickySectionHeadersEnabled={false}
           renderSectionHeader={({ section }) => (

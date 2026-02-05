@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { decode } from 'base64-arraybuffer';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,6 +6,7 @@ import * as Linking from 'expo-linking';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import {
+    ActivityIndicator,
     Alert,
     FlatList,
     Image,
@@ -20,11 +20,13 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
+    useWindowDimensions,
     View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { uploadImage } from '@/lib/image-upload';
 import {
     addMessage,
     deleteEvent,
@@ -40,7 +42,6 @@ import {
 } from '@/lib/local-events';
 import { getProfile } from '@/lib/local-profile';
 import { getOrCreateLocalUserId } from '@/lib/local-user';
-import { supabase } from '@/lib/supabase';
 import EmojiKeyboard from 'rn-emoji-keyboard';
 
 type ChatRow =
@@ -57,10 +58,18 @@ function formatEventDate(createdAt: string): string {
   });
 }
 
+const HEADER_MIN_HEIGHT = 56;
+const BANNER_HEIGHT = 140;
+const AVATAR_SIZE = 32;
+const AVATAR_OVERLAP = -10;
+
 export default function EventDetailsScreen() {
   const insets = useSafeAreaInsets();
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const eventId = typeof id === 'string' ? id : '';
+  const headerHeight = insets.top + HEADER_MIN_HEIGHT;
+  const bubbleImageSize = Math.min(200, Math.round(winWidth * 0.55));
 
   const [event, setEvent] = React.useState<LocalEvent | null>(null);
   const [messages, setMessages] = React.useState<LocalMessage[]>([]);
@@ -75,7 +84,15 @@ export default function EventDetailsScreen() {
   const [joinLoading, setJoinLoading] = React.useState(false);
   const [infoModalVisible, setInfoModalVisible] = React.useState(false);
   const [isEmojiOpen, setIsEmojiOpen] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
   const listRef = React.useRef<FlatList<ChatRow> | null>(null);
+
+  const goingParticipants = React.useMemo(
+    () => participantsWithStatus.filter((p) => p.status === 'approved'),
+    [participantsWithStatus]
+  );
+  const displayAvatars = goingParticipants.slice(0, 4);
+  const extraCount = goingParticipants.length > 4 ? goingParticipants.length - 4 : 0;
 
   const load = React.useCallback(async () => {
     if (!eventId) return;
@@ -144,21 +161,6 @@ export default function EventDetailsScreen() {
     );
   }
 
-  async function uploadImageToSupabase(base64: string, ext: 'jpg' | 'jpeg' | 'png' = 'jpg') {
-    const filePath = `event_${eventId}/${Date.now()}.${ext}`;
-    const contentType = ext === 'png' ? 'image/png' : 'image/jpeg';
-    const arrayBuffer = decode(base64);
-
-    const { error } = await supabase.storage.from('chat-images').upload(filePath, arrayBuffer, {
-      contentType,
-      upsert: false,
-    });
-    if (error) throw error;
-
-    const { data } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-    return data.publicUrl;
-  }
-
   async function handlePickImage() {
     try {
       Keyboard.dismiss();
@@ -173,43 +175,41 @@ export default function EventDetailsScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.5,
-        base64: true,
         allowsEditing: false,
       });
 
       if (result.canceled) return;
       const asset = result.assets?.[0];
-      if (!asset?.base64) {
+      if (!asset?.uri) {
         Alert.alert('Ошибка', 'Не удалось получить изображение.');
         return;
       }
 
-      const extGuess = (asset.uri.split('.').pop() || '').toLowerCase();
-      const ext: 'jpg' | 'jpeg' | 'png' = extGuess === 'png' ? 'png' : extGuess === 'jpeg' ? 'jpeg' : 'jpg';
-
-      setSending(true);
-      const url = await uploadImageToSupabase(asset.base64, ext);
+      setUploading(true);
+      const url = await uploadImage(asset.uri);
+      if (!url) {
+        Alert.alert('Ошибка', 'Не удалось загрузить фото.');
+        return;
+      }
 
       const userId = await getOrCreateLocalUserId();
       const profile = await getProfile();
-
-      await addMessage({
+      const msg = await addMessage({
         event_id: eventId,
         user_id: userId,
-        body: url, // MVP: send URL as content
+        body: url,
         author: {
           name: profile.name || 'Guest',
           avatar_url: profile.photos?.[0] ?? null,
           vibe: profile.vibeIntent ?? null,
         },
       });
-
-      await load();
+      setMessages((prev) => [...prev, msg]);
     } catch (e) {
       console.error('Pick/upload image error:', e);
       Alert.alert('Ошибка', 'Не удалось отправить фото.');
     } finally {
-      setSending(false);
+      setUploading(false);
     }
   }
 
@@ -276,33 +276,85 @@ export default function EventDetailsScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView style={[styles.safe, { width: winWidth }]} edges={['top']}>
         <KeyboardAvoidingView
           style={styles.container}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={0}>
-          {/* Custom Header */}
-          <View style={[styles.customHeader, { paddingTop: insets.top + 8, paddingBottom: 12 }]}>
-            <TouchableOpacity
-              onPress={() => router.back()}
-              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-              style={styles.headerBack}>
-              <Ionicons name="chevron-back" size={28} color="#2D1B3D" />
-            </TouchableOpacity>
-
-            <View style={styles.headerCenter}>
-              <ThemedText type="defaultSemiBold" style={styles.headerTitle} numberOfLines={1}>
-                {event?.title ?? 'Ивент'}
-              </ThemedText>
-              <Text style={styles.headerSubtitle}>{event ? formatEventDate(event.created_at) : ''}</Text>
+          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + BANNER_HEIGHT + 80 : 0}>
+          {/* Event Header: Warm & minimal — no gradient, blends with background */}
+          <View style={styles.eventHeader}>
+            <View style={[styles.banner, { paddingTop: insets.top + 8, minHeight: BANNER_HEIGHT + insets.top }]}>
+              <View style={styles.bannerTop}>
+                <TouchableOpacity
+                  onPress={() => router.back()}
+                  hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                  style={styles.bannerBack}
+                  activeOpacity={0.8}>
+                  <Ionicons name="chevron-back" size={28} color="#2D1B3D" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setInfoModalVisible(true)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  style={styles.bannerInfo}
+                  activeOpacity={0.8}>
+                  <Ionicons name="information-circle-outline" size={26} color="#2D1B3D" />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.bannerTitle} numberOfLines={2}>
+                {event?.title ?? 'Event'}
+              </Text>
             </View>
 
-            <TouchableOpacity
-              onPress={() => setInfoModalVisible(true)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              style={styles.headerInfo}>
-              <Ionicons name="information-circle-outline" size={26} color="#2D1B3D" />
-            </TouchableOpacity>
+            <View style={styles.eventInfoRow}>
+              <View style={styles.eventInfoItem}>
+                <Ionicons name="calendar-outline" size={18} color="#FF9F66" />
+                <Text style={styles.eventInfoText}>{event ? formatEventDate(event.created_at) : '—'}</Text>
+              </View>
+              <View style={styles.eventInfoItem}>
+                <Ionicons name="location-outline" size={18} color="#FF9F66" />
+                <Text style={styles.eventInfoText} numberOfLines={1}>
+                  {event?.meeting_place ?? event?.place_name ?? '—'}
+                </Text>
+              </View>
+              <View style={styles.eventInfoItem}>
+                <Ionicons name="people-outline" size={18} color="#FF9F66" />
+                <Text style={styles.eventInfoText}>{goingParticipants.length} going</Text>
+              </View>
+            </View>
+
+            {(displayAvatars.length > 0 || extraCount > 0) && (
+              <View style={styles.whoGoingRow}>
+                <Text style={styles.whoGoingLabel}>Who&apos;s going</Text>
+                <View style={styles.avatarStack}>
+                  {displayAvatars.map((p, idx) => (
+                    <View
+                      key={p.id}
+                      style={[
+                        styles.avatarStackItem,
+                        { marginLeft: idx === 0 ? 0 : AVATAR_OVERLAP, zIndex: displayAvatars.length - idx },
+                      ]}>
+                      {p.avatar_url ? (
+                        <Image source={{ uri: p.avatar_url }} style={styles.avatarStackImg} />
+                      ) : (
+                        <View style={styles.avatarStackPlaceholder}>
+                          <Text style={styles.avatarStackPlaceholderText}>{p.name.charAt(0).toUpperCase()}</Text>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                  {extraCount > 0 && (
+                    <View
+                      style={[
+                        styles.avatarStackItem,
+                        styles.avatarStackMore,
+                        { marginLeft: AVATAR_OVERLAP, zIndex: 0 },
+                      ]}>
+                      <Text style={styles.avatarStackMoreText}>+{extraCount}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
           </View>
 
           {/* Message List (inverted) */}
@@ -313,6 +365,7 @@ export default function EventDetailsScreen() {
             data={rowsReversed}
             keyExtractor={(r) => r.id}
             inverted
+            style={styles.chatList}
             contentContainerStyle={[styles.chatContent, { paddingBottom: 12 }]}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => {
@@ -373,7 +426,10 @@ export default function EventDetailsScreen() {
                           end={{ x: 1, y: 1 }}
                           style={styles.bubbleGradient}>
                           {isImg ? (
-                            <Image source={{ uri: msg.body }} style={styles.bubbleImage} />
+                            <Image
+                              source={{ uri: msg.body }}
+                              style={[styles.bubbleImage, { width: bubbleImageSize, height: bubbleImageSize }]}
+                            />
                           ) : (
                             <Text style={styles.bubbleTextMine}>{msg.body}</Text>
                           )}
@@ -390,7 +446,10 @@ export default function EventDetailsScreen() {
                       ) : (
                         <>
                           {isImg ? (
-                            <Image source={{ uri: msg.body }} style={styles.bubbleImage} />
+                            <Image
+                              source={{ uri: msg.body }}
+                              style={[styles.bubbleImage, { width: bubbleImageSize, height: bubbleImageSize }]}
+                            />
                           ) : (
                             <Text style={styles.bubbleTextOther}>{msg.body}</Text>
                           )}
@@ -413,8 +472,15 @@ export default function EventDetailsScreen() {
 
           {/* Advanced Input Bar */}
           <View style={[styles.inputBar, { paddingBottom: 10 + insets.bottom }]}>
-            <TouchableOpacity style={styles.attachButton} onPress={handlePickImage} disabled={sending}>
-              <Ionicons name="add" size={26} color="#8B7A9B" />
+            <TouchableOpacity
+              style={[styles.attachButton, !uploading && !sending && styles.attachButtonActive]}
+              onPress={handlePickImage}
+              disabled={sending || uploading}>
+              {uploading ? (
+                <ActivityIndicator size="small" color="#FF9F66" />
+              ) : (
+                <Ionicons name="add" size={26} color={uploading || sending ? '#8B7A9B' : '#2D1B3D'} />
+              )}
             </TouchableOpacity>
 
             <View style={styles.inputWrapper}>
@@ -482,16 +548,66 @@ export default function EventDetailsScreen() {
         transparent
         onRequestClose={() => setInfoModalVisible(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setInfoModalVisible(false)}>
-          <Pressable style={[styles.modalSheet, { paddingBottom: insets.bottom + 24 }]} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={[
+              styles.modalSheet,
+              { paddingBottom: insets.bottom + 24, maxHeight: winHeight * 0.88 },
+            ]}
+            onPress={(e) => e.stopPropagation()}>
             <View style={styles.modalHandle} />
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalContent}>
-              <ThemedText type="title" style={styles.modalTitle}>
-                {event?.title ?? 'Ивент'}
-              </ThemedText>
-              {event?.meeting_place ? (
-                <View style={styles.meetingRow}>
-                  <Text style={styles.meetingEmoji}>📍</Text>
-                  <ThemedText type="defaultSemiBold" style={styles.meetingText}>{event.meeting_place}</ThemedText>
+              <LinearGradient
+                colors={['#FF9F66', '#E879A0', '#8B5CF6']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.modalBanner}>
+                <Text style={styles.modalBannerTitle}>{event?.title ?? 'Event'}</Text>
+              </LinearGradient>
+              <View style={styles.modalInfoBlock}>
+                <View style={styles.modalInfoRow}>
+                  <Ionicons name="calendar-outline" size={20} color="#6E6E73" />
+                  <Text style={styles.modalInfoText}>{event ? formatEventDate(event.created_at) : '—'}</Text>
+                </View>
+                <View style={styles.modalInfoRow}>
+                  <Ionicons name="location-outline" size={20} color="#6E6E73" />
+                  <Text style={styles.modalInfoText}>{event?.meeting_place ?? event?.place_name ?? '—'}</Text>
+                </View>
+                <View style={styles.modalInfoRow}>
+                  <Ionicons name="people-outline" size={20} color="#6E6E73" />
+                  <Text style={styles.modalInfoText}>{goingParticipants.length} participants</Text>
+                </View>
+              </View>
+              {displayAvatars.length > 0 || extraCount > 0 ? (
+                <View style={styles.modalWhoGoing}>
+                  <Text style={styles.whoGoingLabel}>Who&apos;s going</Text>
+                  <View style={styles.avatarStack}>
+                    {displayAvatars.map((p, idx) => (
+                      <View
+                        key={p.id}
+                        style={[
+                          styles.avatarStackItem,
+                          { marginLeft: idx === 0 ? 0 : AVATAR_OVERLAP, zIndex: displayAvatars.length - idx },
+                        ]}>
+                        {p.avatar_url ? (
+                          <Image source={{ uri: p.avatar_url }} style={styles.avatarStackImg} />
+                        ) : (
+                          <View style={styles.avatarStackPlaceholder}>
+                            <Text style={styles.avatarStackPlaceholderText}>{p.name.charAt(0).toUpperCase()}</Text>
+                          </View>
+                        )}
+                      </View>
+                    ))}
+                    {extraCount > 0 && (
+                      <View
+                        style={[
+                          styles.avatarStackItem,
+                          styles.avatarStackMore,
+                          { marginLeft: AVATAR_OVERLAP, zIndex: 0 },
+                        ]}>
+                        <Text style={styles.avatarStackMoreText}>+{extraCount}</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
               ) : null}
               {event?.description ? <ThemedText style={styles.desc}>{event.description}</ThemedText> : null}
@@ -636,37 +752,107 @@ export default function EventDetailsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFF5F0' },
   container: { flex: 1 },
-  customHeader: {
+  eventHeader: {
+    flex: 0,
+    backgroundColor: '#FFF5F0',
+  },
+  banner: {
+    backgroundColor: '#FFF5F0',
+    paddingHorizontal: 12,
+    paddingBottom: 16,
+    justifyContent: 'space-between',
+  },
+  bannerTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    backgroundColor: '#FFF5F0',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(45,27,61,0.08)',
+    justifyContent: 'space-between',
   },
-  headerBack: {
-    padding: 10,
-    marginRight: 4,
+  bannerBack: { padding: 10, marginRight: 4 },
+  bannerInfo: { padding: 10, marginLeft: 4 },
+  bannerTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#2D1B3D',
+    marginTop: 'auto',
   },
-  headerCenter: {
+  eventInfoRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 16,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  eventInfoItem: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
     minWidth: 0,
   },
-  headerTitle: {
-    fontSize: 17,
+  eventInfoText: {
+    fontSize: 13,
+    color: '#2D1B3D',
+    flex: 1,
+  },
+  whoGoingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    gap: 12,
+  },
+  whoGoingLabel: {
+    fontSize: 13,
+    color: '#6E6E73',
+  },
+  avatarStack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatarStackItem: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#FFF5F0',
+  },
+  avatarStackImg: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarStackPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#FFE5D4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarStackPlaceholderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FF9F66',
+  },
+  avatarStackMore: {
+    backgroundColor: 'rgba(45,27,61,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarStackMoreText: {
+    fontSize: 12,
+    fontWeight: '600',
     color: '#2D1B3D',
   },
-  headerSubtitle: {
-    fontSize: 12,
-    color: '#8B7A9B',
-    marginTop: 2,
-  },
-  headerInfo: {
-    padding: 10,
-    marginLeft: 4,
-  },
+  chatList: { flex: 1 },
   chatContent: {
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -726,7 +912,7 @@ const styles = StyleSheet.create({
   },
   bubbleTextMine: { color: '#FFFFFF', fontSize: 15, lineHeight: 20 },
   bubbleTextOther: { color: '#2D1B3D', fontSize: 15, lineHeight: 20, paddingHorizontal: 14, paddingTop: 10 },
-  bubbleImage: { width: 200, height: 200, borderRadius: 12, marginTop: 10, marginHorizontal: 14 },
+  bubbleImage: { borderRadius: 12, marginTop: 10, marginHorizontal: 14 },
   bubbleMeta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -756,6 +942,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,
+  },
+  attachButtonActive: {
+    backgroundColor: 'rgba(255,159,102,0.15)',
   },
   inputWrapper: {
     flex: 1,
@@ -818,21 +1007,51 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 8,
   },
-  modalContent: { padding: 20, paddingBottom: 32 },
-  modalTitle: { color: '#2D1B3D', marginBottom: 12 },
-  meetingRow: {
+  modalContent: { paddingBottom: 32 },
+  modalBanner: {
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    marginHorizontal: 20,
+    marginTop: 8,
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  modalBannerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  modalInfoBlock: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 16,
+    marginHorizontal: 20,
+    marginTop: 12,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  modalInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: '#FFF0E6',
-    marginBottom: 8,
+    gap: 10,
   },
-  meetingEmoji: { fontSize: 14 },
-  meetingText: { color: '#FF9F66', flex: 1 },
-  desc: { color: '#8B7A9B', marginBottom: 12 },
+  modalInfoText: {
+    fontSize: 15,
+    color: '#2D1B3D',
+    flex: 1,
+  },
+  modalWhoGoing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    gap: 12,
+  },
+  desc: { color: '#6E6E73', marginBottom: 12, marginHorizontal: 20, marginTop: 12 },
   openOnMap: {
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
@@ -840,9 +1059,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: 'rgba(255,159,102,0.12)',
     marginBottom: 16,
+    marginHorizontal: 20,
   },
   openOnMapText: { color: '#FF9F66' },
-  joinSection: { marginBottom: 16 },
+  joinSection: { marginBottom: 16, marginHorizontal: 20 },
   joinButton: {
     alignSelf: 'flex-start',
     paddingVertical: 12,
@@ -864,9 +1084,9 @@ const styles = StyleSheet.create({
   statusBadgeTextRejected: { color: '#FF6B6B', fontSize: 14 },
   statusBadgeApproved: { backgroundColor: 'rgba(76,175,80,0.15)' },
   statusBadgeTextApproved: { color: '#4CAF50', fontSize: 14 },
-  participantsSection: { gap: 16, marginBottom: 16 },
+  participantsSection: { gap: 16, marginBottom: 16, marginHorizontal: 20 },
   participantsBlock: { gap: 10 },
-  participantsBlockTitle: { fontSize: 14, color: '#8B7A9B', marginBottom: 4 },
+  participantsBlockTitle: { fontSize: 14, color: '#6E6E73', marginBottom: 4 },
   participantRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -909,7 +1129,8 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     marginTop: 8,
+    marginHorizontal: 20,
   },
   deleteButtonModalText: { color: '#FF6B6B', fontSize: 15 },
-  err: { color: '#8B7A9B', marginTop: 8 },
+  err: { color: '#6E6E73', marginTop: 8, marginHorizontal: 20 },
 });

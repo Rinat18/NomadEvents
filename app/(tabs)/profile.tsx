@@ -1,21 +1,34 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { VibeBadge } from '@/components/vibe-badge';
+import { LoadingScreen } from '@/components/LoadingScreen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { VibeBadge } from '@/components/vibe-badge';
+import { getMyFriends } from '@/lib/friends';
 import { listEvents } from '@/lib/local-events';
 import { getProfile, updateProfile, type LocalProfile, type VibeIntent } from '@/lib/local-profile';
 import { supabase, type Profile as SupabaseProfile } from '@/lib/supabase';
+
+function usernameFromName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[^a-zа-яё0-9]/gi, '')
+    .slice(0, 20);
+  return slug ? `@${slug}` : '@nomad';
+}
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const [profile, setProfile] = React.useState<LocalProfile | null>(null);
   const [supabaseProfile, setSupabaseProfile] = React.useState<SupabaseProfile | null>(null);
   const [eventsCount, setEventsCount] = React.useState(0);
+  const [friendsCount, setFriendsCount] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
 
   // Load profile on focus
@@ -63,8 +76,9 @@ export default function ProfileScreen() {
   }
 
   async function loadStats() {
-    const events = await listEvents();
+    const [events, friends] = await Promise.all([listEvents(), getMyFriends()]);
     setEventsCount(events.length);
+    setFriendsCount(friends.length);
   }
 
   async function toggleGhostMode(value: boolean) {
@@ -108,11 +122,7 @@ export default function ProfileScreen() {
   }, [profile, supabaseProfile]);
 
   if (!displayProfile || loading) {
-    return (
-      <ThemedView style={[styles.container, { paddingTop: 16 + insets.top }]}>
-        <ThemedText>Загрузка...</ThemedText>
-      </ThemedView>
-    );
+    return <LoadingScreen />;
   }
 
   const primaryPhoto = displayProfile.photos[0];
@@ -120,9 +130,9 @@ export default function ProfileScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: 16 + insets.top }]}
+      contentContainerStyle={[styles.content, { paddingTop: 16 + insets.top, paddingBottom: 24 + insets.bottom }]}
       showsVerticalScrollIndicator={false}>
-      {/* Card 1: Photo & Basic Info */}
+      {/* Header Card: Avatar, Name, @username, Vibe */}
       <ThemedView style={styles.card}>
         <View style={styles.photoContainer}>
           {primaryPhoto ? (
@@ -140,27 +150,40 @@ export default function ProfileScreen() {
             </View>
           )}
         </View>
-
         <View style={styles.nameSection}>
           <ThemedText type="title" style={styles.name}>
             {displayProfile.name}
-            {displayProfile.age && <ThemedText style={styles.age}> • {displayProfile.age}</ThemedText>}
+            {displayProfile.age != null && displayProfile.age > 0 && (
+              <ThemedText style={styles.age}> · {displayProfile.age}</ThemedText>
+            )}
           </ThemedText>
-          {displayProfile.location && (
-            <ThemedText style={styles.location}>📍 {displayProfile.location}</ThemedText>
+          <ThemedText style={styles.username}>{usernameFromName(displayProfile.name)}</ThemedText>
+          {displayProfile.vibeIntent && (
+            <View style={styles.vibeBadgeWrap}>
+              <VibeBadge vibe={displayProfile.vibeIntent} size="large" />
+            </View>
           )}
         </View>
       </ThemedView>
 
-      {/* Card 2: Vibe/Intent */}
-      {displayProfile.vibeIntent && (
-        <ThemedView style={styles.card}>
-          <ThemedText type="defaultSemiBold" style={styles.cardTitle}>
-            Что ищу
-          </ThemedText>
-          <VibeBadge vibe={displayProfile.vibeIntent} size="large" />
-        </ThemedView>
-      )}
+      {/* Stats Row: Events, Rating, Friends */}
+      <View style={styles.statsRow}>
+        <View style={styles.statBlock}>
+          <ThemedText type="title" style={styles.statNumber}>{eventsCount}</ThemedText>
+          <ThemedText style={styles.statLabel}>Events</ThemedText>
+        </View>
+        <View style={styles.statBlock}>
+          <ThemedText type="title" style={styles.statNumber}>5.0 ★</ThemedText>
+          <ThemedText style={styles.statLabel}>Rating</ThemedText>
+        </View>
+        <TouchableOpacity
+          style={styles.statBlock}
+          onPress={() => router.push('/friends')}
+          activeOpacity={0.8}>
+          <ThemedText type="title" style={styles.statNumber}>{friendsCount}</ThemedText>
+          <ThemedText style={styles.statLabel}>Friends</ThemedText>
+        </TouchableOpacity>
+      </View>
 
       {/* Card 3: Bio */}
       {displayProfile.bio && (
@@ -188,21 +211,23 @@ export default function ProfileScreen() {
         </ThemedView>
       )}
 
-      {/* Card 5: Interests */}
-      {displayProfile.interests.length > 0 && (
-        <ThemedView style={styles.card}>
-          <ThemedText type="defaultSemiBold" style={styles.cardTitle}>
-            Интересы
-          </ThemedText>
+      {/* Interests Section */}
+      <ThemedView style={styles.card}>
+        <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
+          Interests
+        </ThemedText>
+        {displayProfile.interests.length > 0 ? (
           <View style={styles.chipsRow}>
             {displayProfile.interests.map((interest, idx) => (
               <View key={idx} style={styles.interestChip}>
-                <ThemedText style={styles.interestText}>{interest}</ThemedText>
+                <ThemedText style={styles.interestChipText}>{interest}</ThemedText>
               </View>
             ))}
           </View>
-        </ThemedView>
-      )}
+        ) : (
+          <ThemedText style={styles.bodyMuted}>No interests added yet.</ThemedText>
+        )}
+      </ThemedView>
 
       {/* Card 6: Languages */}
       {displayProfile.languages.length > 0 && (
@@ -264,32 +289,31 @@ export default function ProfileScreen() {
         </View>
       </ThemedView>
 
-      {/* Card 9: Stats */}
-      <ThemedView style={styles.card}>
-        <ThemedText type="defaultSemiBold" style={styles.cardTitle}>
-          Статистика
-        </ThemedText>
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <ThemedText type="title" style={styles.statNumber}>
-              {eventsCount}
-            </ThemedText>
-            <ThemedText style={styles.statLabel}>Созданных встреч</ThemedText>
-          </View>
-        </View>
-      </ThemedView>
+      {/* Edit Profile + Friends: side-by-side */}
+      <View style={styles.actionRow}>
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => router.push('/edit-profile')}
+          activeOpacity={0.8}>
+          <ThemedText type="defaultSemiBold" style={styles.editButtonText}>
+            Edit Profile
+          </ThemedText>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.friendsButton}
+          onPress={() => router.push('/friends')}
+          activeOpacity={0.8}>
+          <Ionicons name="people" size={20} color="#FFFFFF" />
+          <ThemedText type="defaultSemiBold" style={styles.friendsButtonText}>
+            Friends
+          </ThemedText>
+        </TouchableOpacity>
+      </View>
 
-      {/* Edit Button */}
-      <Pressable style={styles.editButton} onPress={() => router.push('/edit-profile')}>
-        <ThemedText type="defaultSemiBold" style={styles.editButtonText}>
-          ✏️ Редактировать профиль
-        </ThemedText>
-      </Pressable>
-
-      {/* Log Out Button */}
-      <Pressable style={styles.logoutButton} onPress={handleLogout}>
-        <ThemedText style={styles.logoutButtonText}>Выйти</ThemedText>
-      </Pressable>
+      {/* Log Out: Small text at bottom */}
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
+        <ThemedText style={styles.logoutButtonText}>Log Out</ThemedText>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -297,22 +321,22 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFF5F0', // Warm peach background
+    backgroundColor: '#FFF5F0',
   },
   content: {
     padding: 16,
     gap: 16,
-    paddingBottom: 100, // Extra padding for tab bar + logout button
+    paddingBottom: 100,
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 20,
-    shadowColor: '#FF9F66',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowRadius: 12,
+    elevation: 5,
   },
   photoContainer: {
     alignItems: 'center',
@@ -320,16 +344,16 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   mainPhoto: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     borderWidth: 4,
     borderColor: '#FF9F66',
   },
   photoPlaceholder: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: '#FFE5D4',
     alignItems: 'center',
     justifyContent: 'center',
@@ -337,13 +361,13 @@ const styles = StyleSheet.create({
     borderColor: '#FF9F66',
   },
   photoPlaceholderText: {
-    fontSize: 50,
+    fontSize: 44,
     color: '#FF9F66',
   },
   photoCountBadge: {
     position: 'absolute',
     bottom: 0,
-    right: '35%',
+    right: '32%',
     backgroundColor: '#C77DFF',
     borderRadius: 12,
     paddingHorizontal: 8,
@@ -359,26 +383,40 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   name: {
-    fontSize: 26,
+    fontSize: 28,
+    fontWeight: '700',
     color: '#2D1B3D',
   },
   age: {
-    fontSize: 26,
+    fontSize: 28,
+    fontWeight: '700',
     color: '#FF9F66',
   },
-  location: {
-    fontSize: 14,
-    color: '#8B7A9B',
+  username: {
+    fontSize: 15,
+    color: '#6E6E73',
+  },
+  vibeBadgeWrap: {
+    marginTop: 8,
   },
   cardTitle: {
     fontSize: 16,
     color: '#2D1B3D',
     marginBottom: 12,
   },
+  sectionTitle: {
+    fontSize: 16,
+    color: '#2D1B3D',
+    marginBottom: 12,
+  },
+  bodyMuted: {
+    fontSize: 15,
+    color: '#6E6E73',
+  },
   bioText: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#4A3A5A',
+    color: '#6E6E73',
   },
   chipsRow: {
     flexDirection: 'row',
@@ -391,9 +429,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#FFE5D4',
   },
-  interestText: {
+  interestChipText: {
     fontSize: 13,
-    color: '#FF6B35',
+    color: '#2D1B3D',
   },
   langChip: {
     paddingHorizontal: 14,
@@ -433,7 +471,7 @@ const styles = StyleSheet.create({
   },
   spotAddress: {
     fontSize: 13,
-    color: '#8B7A9B',
+    color: '#6E6E73',
   },
   privacyRow: {
     gap: 16,
@@ -453,54 +491,79 @@ const styles = StyleSheet.create({
   },
   privacyHint: {
     fontSize: 12,
-    color: '#8B7A9B',
+    color: '#6E6E73',
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
   },
-  statItem: {
+  statBlock: {
     flex: 1,
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: '#FFF0E6',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
   },
   statNumber: {
-    fontSize: 32,
-    color: '#FF6B35',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#2D1B3D',
   },
   statLabel: {
     fontSize: 12,
-    color: '#8B7A9B',
+    color: '#6E6E73',
     marginTop: 4,
   },
-  editButton: {
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
     marginTop: 8,
+    marginBottom: 24,
+  },
+  editButton: {
+    flex: 1,
     paddingVertical: 16,
     paddingHorizontal: 20,
-    borderRadius: 20,
-    backgroundColor: '#FF9F66',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#FF9F66',
+    backgroundColor: 'transparent',
     alignItems: 'center',
-    shadowColor: '#FF9F66',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
   },
   editButtonText: {
+    color: '#FF9F66',
+    fontSize: 16,
+  },
+  friendsButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    backgroundColor: '#FF9F66',
+  },
+  friendsButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
   },
   logoutButton: {
-    marginTop: 16,
+    marginTop: 20,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   logoutButtonText: {
-    color: '#FF6B6B',
-    fontSize: 16,
-    fontWeight: '500',
+    color: '#6E6E73',
+    fontSize: 14,
   },
 });

@@ -1,8 +1,9 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { LoadingScreen } from '@/components/LoadingScreen';
 import { ThemedText } from '@/components/themed-text';
 import { MAPBOX_ACCESS_TOKEN } from '@/constants/keys';
 import { listEvents, type LocalEvent } from '@/lib/local-events';
@@ -274,10 +275,7 @@ export default function MapScreen() {
           {/* Loading overlay */}
           {loading && (
             <View style={styles.loadingOverlay}>
-              <View style={styles.loadingCard}>
-                <ActivityIndicator size="large" color="#FF9F66" />
-                <ThemedText style={styles.loadingText}>Загрузка ивентов...</ThemedText>
-              </View>
+              <LoadingScreen />
             </View>
           )}
         </View>
@@ -479,24 +477,6 @@ const styles = StyleSheet.create({
   // Loading overlay
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 245, 240, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
-    alignItems: 'center',
-    gap: 12,
-    shadowColor: '#FF9F66',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: '#8B7A9B',
+    backgroundColor: '#FFF5F0',
   },
 });

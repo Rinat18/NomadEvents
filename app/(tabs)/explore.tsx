@@ -71,7 +71,7 @@ export default function EventsScreen() {
         keyExtractor={(e) => e.id}
         onRefresh={load}
         refreshing={loading}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: 24 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           !loading ? (
