@@ -14,6 +14,8 @@ export type LocalEvent = {
   /** If false, join requests require creator approval */
   auto_accept: boolean;
   created_at: string;
+  /** Cover image URL (Supabase Storage event-images or any URL) */
+  cover_image_url?: string | null;
   creator?: {
     name: string;
     avatar_url: string | null;
@@ -49,6 +51,7 @@ type SupabaseEvent = {
   auto_accept?: boolean;
   created_at: string;
   start_time: string | null;
+  cover_image_url?: string | null;
   profiles?: {
     name: string | null;
     avatar_url: string | null;
@@ -87,6 +90,7 @@ function mapToLocalEvent(row: SupabaseEvent): LocalEvent {
     creator_id: row.creator_id,
     auto_accept: row.auto_accept !== false, // default true for backward compat
     created_at: row.created_at,
+    cover_image_url: row.cover_image_url ?? null,
     creator: row.profiles ? {
       name: row.profiles.name || 'User',
       avatar_url: row.profiles.avatar_url,
@@ -197,6 +201,56 @@ export async function createEvent(input: {
   }
 
   return mapToLocalEvent(result.data);
+}
+
+/**
+ * Update event (title, description, cover_image_url). Creator only.
+ */
+export async function updateEvent(
+  eventId: string,
+  updates: { title?: string; description?: string | null; cover_image_url?: string | null }
+): Promise<LocalEvent | null> {
+  const payload: Record<string, unknown> = {};
+  if (updates.title !== undefined) payload.title = updates.title;
+  if (updates.description !== undefined) payload.description = updates.description;
+  if (updates.cover_image_url !== undefined) payload.cover_image_url = updates.cover_image_url;
+
+  if (Object.keys(payload).length === 0) return getEventById(eventId);
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc('update_event_by_creator', {
+    p_event_id: eventId,
+    p_title: updates.title,
+    p_description: updates.description ?? null,
+    p_cover_image_url: updates.cover_image_url ?? null,
+  });
+
+  if (!rpcError) {
+    const result = rpcData as { ok?: boolean; error?: string } | null;
+    if (result?.ok) return getEventById(eventId);
+    const msg = result?.error === 'not_creator' ? 'Нет прав на редактирование' : result?.error === 'event_not_found' ? 'Ивент не найден' : 'Не удалось обновить ивент';
+    throw new Error(msg);
+  }
+
+  const isMissingFunction =
+    rpcError.code === '42883' ||
+    (typeof rpcError.message === 'string' &&
+      (rpcError.message.includes('does not exist') || rpcError.message.includes('Could not find the function') || rpcError.message.includes('schema cache')));
+
+  if (isMissingFunction) {
+    const { data, error } = await supabase.from('events').update(payload).eq('id', eventId).select('id');
+    if (error) {
+      console.error('[Events] Error updating event:', error.message);
+      throw error;
+    }
+    if (!data || data.length === 0) {
+      console.error('[Events] Error updating event: no rows updated. Run SQL from supabase/migrations/update_event_rpc.sql in Dashboard.');
+      throw new Error('Не удалось обновить ивент. Выполните SQL из supabase/migrations/update_event_rpc.sql в Supabase Dashboard.');
+    }
+    return getEventById(eventId);
+  }
+
+  console.error('[Events] Error updating event:', rpcError.message);
+  throw rpcError;
 }
 
 /**

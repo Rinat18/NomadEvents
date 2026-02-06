@@ -7,6 +7,7 @@ import { LoadingScreen } from '@/components/LoadingScreen';
 import { ThemedText } from '@/components/themed-text';
 import { MAPBOX_ACCESS_TOKEN } from '@/constants/keys';
 import { listEvents, type LocalEvent } from '@/lib/local-events';
+import { useTheme } from '@/lib/theme';
 import Mapbox from '@rnmapbox/maps';
 
 // Helper function to get emoji from event (use event.emoji if available, otherwise fallback)
@@ -32,12 +33,14 @@ function getEventEmoji(event: LocalEvent): string {
 
 export default function MapScreen() {
   const insets = useSafeAreaInsets();
+  const { isDark, colors } = useTheme();
   const [events, setEvents] = React.useState<LocalEvent[]>([]);
   const [selectedPoint, setSelectedPoint] = React.useState<{ lat: number; lng: number } | null>(null);
   const [selectedEvent, setSelectedEvent] = React.useState<LocalEvent | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
   const [loading, setLoading] = React.useState(true); // Initial loading state
   const cardAnimation = React.useRef(new Animated.Value(0)).current;
+  const isFirstLoad = React.useRef(true);
 
   React.useEffect(() => {
     Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
@@ -66,19 +69,28 @@ export default function MapScreen() {
     try {
       const data = await listEvents();
       setEvents(data);
+      return data;
     } catch (e) {
       console.error('Ошибка загрузки ивентов:', e);
+      return [];
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Load events when screen comes into focus
+  // Load events when screen comes into focus; keep selected event card open but refresh its data
   useFocusEffect(
     React.useCallback(() => {
-      // Show loader only if we have no events yet
-      void loadEvents(events.length === 0);
-    }, [loadEvents, events.length])
+      const selectedId = selectedEvent?.id;
+      const shouldShowLoader = isFirstLoad.current;
+      if (isFirstLoad.current) isFirstLoad.current = false;
+      loadEvents(shouldShowLoader).then((data) => {
+        if (selectedId && data?.length) {
+          const updated = data.find((e) => e.id === selectedId);
+          if (updated) setSelectedEvent(updated);
+        }
+      });
+    }, [loadEvents, selectedEvent?.id])
   );
 
   const handleRefresh = React.useCallback(async () => {
@@ -145,7 +157,7 @@ export default function MapScreen() {
   });
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {Platform.OS === 'web' ? (
         <View style={styles.webCard}>
           <ThemedText>Mapbox в web-версии этого проекта не поддерживается.</ThemedText>
@@ -155,7 +167,7 @@ export default function MapScreen() {
         <View style={styles.mapContainer}>
           <Mapbox.MapView
             style={{ flex: 1 }}
-            styleURL={Mapbox.StyleURL.Light}
+            styleURL={isDark ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light}
             onPress={handleMapPress}>
             <Mapbox.Camera
               defaultSettings={{

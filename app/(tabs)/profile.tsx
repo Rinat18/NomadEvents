@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LoadingScreen } from '@/components/LoadingScreen';
@@ -13,6 +14,7 @@ import { getMyFriends } from '@/lib/friends';
 import { listEvents } from '@/lib/local-events';
 import { getProfile, updateProfile, type LocalProfile, type VibeIntent } from '@/lib/local-profile';
 import { supabase, type Profile as SupabaseProfile } from '@/lib/supabase';
+import { useTheme } from '@/lib/theme';
 
 function usernameFromName(name: string): string {
   const slug = name
@@ -25,6 +27,7 @@ function usernameFromName(name: string): string {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, isDark, toggleTheme, wallpaperUri, setWallpaper } = useTheme();
   const [profile, setProfile] = React.useState<LocalProfile | null>(null);
   const [supabaseProfile, setSupabaseProfile] = React.useState<SupabaseProfile | null>(null);
   const [eventsCount, setEventsCount] = React.useState(0);
@@ -103,6 +106,23 @@ export default function ProfileScreen() {
     }
   }
 
+  async function handleChangeWallpaper() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow access to your photos to set a wallpaper.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]?.uri) {
+      setWallpaper(result.assets[0].uri);
+    }
+  }
+
   // Merge Supabase profile with local profile
   const displayProfile = React.useMemo(() => {
     if (!profile) return null;
@@ -129,11 +149,11 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={[styles.content, { paddingTop: 16 + insets.top, paddingBottom: 24 + insets.bottom }]}
       showsVerticalScrollIndicator={false}>
       {/* Header Card: Avatar, Name, @username, Vibe */}
-      <ThemedView style={styles.card}>
+      <ThemedView style={[styles.card, { backgroundColor: colors.card }]}>
         <View style={styles.photoContainer}>
           {primaryPhoto ? (
             <Image source={{ uri: primaryPhoto }} style={styles.mainPhoto} contentFit="cover" />
@@ -151,13 +171,13 @@ export default function ProfileScreen() {
           )}
         </View>
         <View style={styles.nameSection}>
-          <ThemedText type="title" style={styles.name}>
+          <ThemedText type="title" style={[styles.name, { color: colors.text }]}>
             {displayProfile.name}
             {displayProfile.age != null && displayProfile.age > 0 && (
               <ThemedText style={styles.age}> · {displayProfile.age}</ThemedText>
             )}
           </ThemedText>
-          <ThemedText style={styles.username}>{usernameFromName(displayProfile.name)}</ThemedText>
+          <ThemedText style={[styles.username, { color: colors.textMuted }]}>{usernameFromName(displayProfile.name)}</ThemedText>
           {displayProfile.vibeIntent && (
             <View style={styles.vibeBadgeWrap}>
               <VibeBadge vibe={displayProfile.vibeIntent} size="large" />
@@ -168,37 +188,37 @@ export default function ProfileScreen() {
 
       {/* Stats Row: Events, Rating, Friends */}
       <View style={styles.statsRow}>
-        <View style={styles.statBlock}>
-          <ThemedText type="title" style={styles.statNumber}>{eventsCount}</ThemedText>
-          <ThemedText style={styles.statLabel}>Events</ThemedText>
+        <View style={[styles.statBlock, { backgroundColor: colors.card }]}>
+          <ThemedText type="title" style={[styles.statNumber, { color: colors.text }]}>{eventsCount}</ThemedText>
+          <ThemedText style={[styles.statLabel, { color: colors.textMuted }]}>Events</ThemedText>
         </View>
-        <View style={styles.statBlock}>
-          <ThemedText type="title" style={styles.statNumber}>5.0 ★</ThemedText>
-          <ThemedText style={styles.statLabel}>Rating</ThemedText>
+        <View style={[styles.statBlock, { backgroundColor: colors.card }]}>
+          <ThemedText type="title" style={[styles.statNumber, { color: colors.text }]}>5.0 ★</ThemedText>
+          <ThemedText style={[styles.statLabel, { color: colors.textMuted }]}>Rating</ThemedText>
         </View>
         <TouchableOpacity
-          style={styles.statBlock}
+          style={[styles.statBlock, { backgroundColor: colors.card }]}
           onPress={() => router.push('/friends')}
           activeOpacity={0.8}>
-          <ThemedText type="title" style={styles.statNumber}>{friendsCount}</ThemedText>
-          <ThemedText style={styles.statLabel}>Friends</ThemedText>
+          <ThemedText type="title" style={[styles.statNumber, { color: colors.text }]}>{friendsCount}</ThemedText>
+          <ThemedText style={[styles.statLabel, { color: colors.textMuted }]}>Friends</ThemedText>
         </TouchableOpacity>
       </View>
 
       {/* Card 3: Bio */}
       {displayProfile.bio && (
-        <ThemedView style={styles.card}>
-          <ThemedText type="defaultSemiBold" style={styles.cardTitle}>
+        <ThemedView style={[styles.card, { backgroundColor: colors.card }]}>
+          <ThemedText type="defaultSemiBold" style={[styles.cardTitle, { color: colors.text }]}>
             О себе
           </ThemedText>
-          <ThemedText style={styles.bioText}>{displayProfile.bio}</ThemedText>
+          <ThemedText style={[styles.bioText, { color: colors.textMuted }]}>{displayProfile.bio}</ThemedText>
         </ThemedView>
       )}
 
       {/* Card 4: Conversation Starters */}
       {displayProfile.conversationStarters.length > 0 && (
-        <ThemedView style={styles.card}>
-          <ThemedText type="defaultSemiBold" style={styles.cardTitle}>
+        <ThemedView style={[styles.card, { backgroundColor: colors.card }]}>
+          <ThemedText type="defaultSemiBold" style={[styles.cardTitle, { color: colors.text }]}>
             Темы для разговора
           </ThemedText>
           <View style={styles.startersList}>
@@ -212,8 +232,8 @@ export default function ProfileScreen() {
       )}
 
       {/* Interests Section */}
-      <ThemedView style={styles.card}>
-        <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
+      <ThemedView style={[styles.card, { backgroundColor: colors.card }]}>
+        <ThemedText type="defaultSemiBold" style={[styles.sectionTitle, { color: colors.text }]}>
           Interests
         </ThemedText>
         {displayProfile.interests.length > 0 ? (
@@ -225,14 +245,14 @@ export default function ProfileScreen() {
             ))}
           </View>
         ) : (
-          <ThemedText style={styles.bodyMuted}>No interests added yet.</ThemedText>
+          <ThemedText style={[styles.bodyMuted, { color: colors.textMuted }]}>No interests added yet.</ThemedText>
         )}
       </ThemedView>
 
       {/* Card 6: Languages */}
       {displayProfile.languages.length > 0 && (
-        <ThemedView style={styles.card}>
-          <ThemedText type="defaultSemiBold" style={styles.cardTitle}>
+        <ThemedView style={[styles.card, { backgroundColor: colors.card }]}>
+          <ThemedText type="defaultSemiBold" style={[styles.cardTitle, { color: colors.text }]}>
             Языки
           </ThemedText>
           <View style={styles.chipsRow}>
@@ -249,8 +269,8 @@ export default function ProfileScreen() {
 
       {/* Card 7: Favorite Spots */}
       {displayProfile.favoriteSpots.length > 0 && (
-        <ThemedView style={styles.card}>
-          <ThemedText type="defaultSemiBold" style={styles.cardTitle}>
+        <ThemedView style={[styles.card, { backgroundColor: colors.card }]}>
+          <ThemedText type="defaultSemiBold" style={[styles.cardTitle, { color: colors.text }]}>
             Любимые места
           </ThemedText>
           <View style={styles.spotsList}>
@@ -267,17 +287,17 @@ export default function ProfileScreen() {
       )}
 
       {/* Card 8: Privacy Settings */}
-      <ThemedView style={styles.card}>
-        <ThemedText type="defaultSemiBold" style={styles.cardTitle}>
+      <ThemedView style={[styles.card, { backgroundColor: colors.card }]}>
+        <ThemedText type="defaultSemiBold" style={[styles.cardTitle, { color: colors.text }]}>
           Настройки приватности
         </ThemedText>
         <View style={styles.privacyRow}>
           <View style={styles.privacyItem}>
             <View style={styles.privacyLabel}>
-              <ThemedText type="defaultSemiBold" style={styles.privacyText}>
+              <ThemedText type="defaultSemiBold" style={[styles.privacyText, { color: colors.text }]}>
                 👻 Режим невидимки
               </ThemedText>
-              <ThemedText style={styles.privacyHint}>Скрыть меня на карте</ThemedText>
+              <ThemedText style={[styles.privacyHint, { color: colors.textMuted }]}>Скрыть меня на карте</ThemedText>
             </View>
             <Switch
               value={displayProfile.privacy.ghostMode}
@@ -287,6 +307,38 @@ export default function ProfileScreen() {
             />
           </View>
         </View>
+      </ThemedView>
+
+      {/* Settings: Appearance */}
+      <ThemedView style={[styles.card, { backgroundColor: colors.card }]}>
+        <ThemedText type="defaultSemiBold" style={[styles.cardTitle, { color: colors.text }]}>
+          Settings
+        </ThemedText>
+        <View style={styles.privacyRow}>
+          <View style={styles.privacyItem}>
+            <View style={styles.privacyLabel}>
+              <Text style={[styles.privacyText, { color: colors.text }]}>🌙 Dark Mode</Text>
+              <Text style={[styles.privacyHint, { color: colors.textMuted }]}>Switch app theme</Text>
+            </View>
+            <Switch
+              value={isDark}
+              onValueChange={toggleTheme}
+              trackColor={{ false: '#E0E0E0', true: colors.accent }}
+              thumbColor={isDark ? '#FFFFFF' : '#F4F3F4'}
+            />
+          </View>
+        </View>
+        <TouchableOpacity
+          style={[styles.wallpaperButton, { borderColor: colors.border }]}
+          onPress={handleChangeWallpaper}
+          activeOpacity={0.8}>
+          <Text style={[styles.wallpaperButtonText, { color: colors.text }]}>🖼️ Change Wallpaper</Text>
+          {wallpaperUri ? (
+            <Text style={[styles.wallpaperHint, { color: colors.textMuted }]} numberOfLines={1}>
+              Custom image set
+            </Text>
+          ) : null}
+        </TouchableOpacity>
       </ThemedView>
 
       {/* Edit Profile + Friends: side-by-side */}
@@ -312,7 +364,7 @@ export default function ProfileScreen() {
 
       {/* Log Out: Small text at bottom */}
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
-        <ThemedText style={styles.logoutButtonText}>Log Out</ThemedText>
+        <Text style={[styles.logoutButtonText, { color: colors.textMuted }]}>Log Out</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -556,6 +608,22 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
   },
+  wallpaperButton: {
+    marginTop: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  wallpaperButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  wallpaperHint: {
+    fontSize: 12,
+    marginTop: 4,
+  },
   logoutButton: {
     marginTop: 20,
     paddingVertical: 14,
@@ -563,7 +631,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoutButtonText: {
-    color: '#6E6E73',
     fontSize: 14,
   },
 });

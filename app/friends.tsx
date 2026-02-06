@@ -28,12 +28,14 @@ import {
   type ProfileBasic,
   type FriendshipStatus,
 } from '@/lib/friends';
+import { useTheme } from '@/lib/theme';
 
 const TAB_MY_FRIENDS = 0;
 const TAB_FIND_PEOPLE = 1;
 
 export default function FriendsScreen() {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const [tab, setTab] = React.useState(0);
   const [requests, setRequests] = React.useState<FriendRequestWithSender[]>([]);
   const [friends, setFriends] = React.useState<FriendWithProfile[]>([]);
@@ -118,17 +120,17 @@ export default function FriendsScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['bottom']}>
-        {/* Header: Warm monochrome */}
-        <View style={[styles.header, { paddingTop: 8, paddingBottom: 16 }]}>
+      <SafeAreaView style={[styles.safe, { paddingTop: insets.top, backgroundColor: colors.background }]} edges={['bottom']}>
+        {/* Header */}
+        <View style={[styles.header, { paddingTop: 8, paddingBottom: 16, backgroundColor: colors.background }]}>
           <TouchableOpacity
             onPress={() => router.back()}
             hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
             style={styles.headerBack}
             activeOpacity={0.8}>
-            <Text style={styles.headerBackIcon}>←</Text>
+            <Text style={[styles.headerBackIcon, { color: colors.text }]}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Friends & People</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Friends & People</Text>
           <View style={styles.headerRight} />
         </View>
 

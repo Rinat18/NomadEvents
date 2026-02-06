@@ -2,22 +2,61 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
-
-import { LoadingScreen } from '@/components/LoadingScreen';
+import { ImageBackground, StyleSheet, View } from 'react-native';
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { LoadingScreen } from '@/components/LoadingScreen';
+import { ThemeProvider as AppThemeProvider, useTheme } from '@/lib/theme';
 import { checkAndSeedData } from '@/lib/seed-data';
 import { supabase } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
+
+function RootBackground({ children }: { children: React.ReactNode }) {
+  const { colors, wallpaperUri } = useTheme();
+  if (wallpaperUri) {
+    return (
+      <ImageBackground
+        source={{ uri: wallpaperUri }}
+        style={styles.background}
+        resizeMode="cover">
+        {children}
+      </ImageBackground>
+    );
+  }
+  return <View style={[styles.background, { backgroundColor: colors.background }]}>{children}</View>;
+}
+
+function ThemedStack() {
+  const { colors, isDark } = useTheme();
+  return (
+    <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
+      <Stack
+        screenOptions={{
+          contentStyle: { backgroundColor: colors.background },
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
+        }}>
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="create-event" options={{ presentation: 'modal', title: 'Создать ивент' }} />
+        <Stack.Screen name="edit-profile" options={{ presentation: 'modal', title: 'Редактировать профиль' }} />
+        <Stack.Screen name="event/[id]" options={{ title: 'Ивент' }} />
+        <Stack.Screen name="user/[id]" options={{ title: 'Профиль' }} />
+        <Stack.Screen name="friends" options={{ title: 'Friends' }} />
+        <Stack.Screen name="dm/[id]" options={{ title: 'Чат' }} />
+        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+      </Stack>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+    </ThemeProvider>
+  );
+}
 
 export const unstable_settings = {
   anchor: '(tabs)',
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const segments = useSegments();
   const router = useRouter();
   const [isLoading, setIsLoading] = React.useState(true);
@@ -76,20 +115,17 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="create-event" options={{ presentation: 'modal', title: 'Создать ивент' }} />
-          <Stack.Screen name="edit-profile" options={{ presentation: 'modal', title: 'Редактировать профиль' }} />
-          <Stack.Screen name="event/[id]" options={{ title: 'Ивент' }} />
-          <Stack.Screen name="user/[id]" options={{ title: 'Профиль' }} />
-          <Stack.Screen name="friends" options={{ title: 'Friends' }} />
-          <Stack.Screen name="dm/[id]" options={{ title: 'Чат' }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        </Stack>
-        <StatusBar style="light" />
-      </ThemeProvider>
+      <AppThemeProvider>
+        <RootBackground>
+          <ThemedStack />
+        </RootBackground>
+      </AppThemeProvider>
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  background: {
+    flex: 1,
+  },
+});

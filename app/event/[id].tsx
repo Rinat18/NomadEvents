@@ -16,6 +16,7 @@ import {
     Platform,
     Pressable,
     ScrollView,
+    Share,
     StyleSheet,
     Text,
     TextInput,
@@ -26,7 +27,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { uploadImage } from '@/lib/image-upload';
+import { uploadEventImage, uploadImage } from '@/lib/image-upload';
 import {
     addMessage,
     deleteEvent,
@@ -35,6 +36,7 @@ import {
     getMyParticipantStatus,
     joinEvent,
     listMessages,
+    updateEvent,
     updateParticipantStatus,
     type LocalEvent,
     type LocalMessage,
@@ -42,6 +44,7 @@ import {
 } from '@/lib/local-events';
 import { getProfile } from '@/lib/local-profile';
 import { getOrCreateLocalUserId } from '@/lib/local-user';
+import { useTheme } from '@/lib/theme';
 import EmojiKeyboard from 'rn-emoji-keyboard';
 
 type ChatRow =
@@ -59,14 +62,15 @@ function formatEventDate(createdAt: string): string {
 }
 
 const HEADER_MIN_HEIGHT = 56;
-const BANNER_HEIGHT = 140;
 const AVATAR_SIZE = 32;
 const AVATAR_OVERLAP = -10;
+const TG_HEADER_AVATAR = 36;
 
 export default function EventDetailsScreen() {
   const insets = useSafeAreaInsets();
   const { width: winWidth, height: winHeight } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { colors } = useTheme();
   const eventId = typeof id === 'string' ? id : '';
   const headerHeight = insets.top + HEADER_MIN_HEIGHT;
   const bubbleImageSize = Math.min(200, Math.round(winWidth * 0.55));
@@ -82,10 +86,19 @@ export default function EventDetailsScreen() {
     Array<{ id: string; name: string; avatar_url: string | null; vibe: string | null; status: ParticipantStatus }>
   >([]);
   const [joinLoading, setJoinLoading] = React.useState(false);
-  const [infoModalVisible, setInfoModalVisible] = React.useState(false);
+  const [showDetails, setShowDetails] = React.useState(false);
   const [isEmojiOpen, setIsEmojiOpen] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
   const listRef = React.useRef<FlatList<ChatRow> | null>(null);
+
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [editForm, setEditForm] = React.useState<{ title: string; description: string; imageUrl: string | null }>({
+    title: '',
+    description: '',
+    imageUrl: null,
+  });
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [uploadingCover, setUploadingCover] = React.useState(false);
 
   const goingParticipants = React.useMemo(
     () => participantsWithStatus.filter((p) => p.status === 'approved'),
@@ -272,89 +285,132 @@ export default function EventDetailsScreen() {
 
   const hasText = text.trim().length > 0;
 
+  async function handleCopyLink() {
+    const link = `nomadtable://event/${eventId}`;
+    try {
+      await Share.share({
+        message: link,
+        title: event?.title ?? 'Event',
+      });
+    } catch {
+      Alert.alert('Link', link, [{ text: 'OK' }]);
+    }
+  }
+
+  function startEditing() {
+    if (!event) return;
+    setEditForm({
+      title: event.title,
+      description: event.description ?? '',
+      imageUrl: event.cover_image_url ?? null,
+    });
+    setIsEditing(true);
+  }
+
+  function cancelEditing() {
+    setIsEditing(false);
+    setEditForm({ title: '', description: '', imageUrl: null });
+  }
+
+  async function handleSaveEvent() {
+    if (!event || isSaving) return;
+    setIsSaving(true);
+    setError(null);
+    try {
+      const nextTitle = editForm.title.trim() || event.title;
+      const nextDescription = editForm.description.trim() || null;
+
+      await updateEvent(eventId, {
+        title: nextTitle,
+        description: nextDescription,
+        cover_image_url: editForm.imageUrl,
+      });
+
+      // Optimistically update local event so UI reflects changes immediately
+      setEvent((prev) =>
+        prev
+          ? {
+              ...prev,
+              title: nextTitle,
+              description: nextDescription,
+              cover_image_url: editForm.imageUrl ?? prev.cover_image_url ?? null,
+            }
+          : prev
+      );
+
+      setIsEditing(false);
+      setEditForm({ title: '', description: '', imageUrl: null });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save');
+    }
+    setIsSaving(false);
+  }
+
+  async function pickAndUploadImage() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission', 'Allow access to photos to set a cover image.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]?.uri) return;
+    setUploadingCover(true);
+    try {
+      const url = await uploadEventImage(result.assets[0].uri);
+      if (url) setEditForm((prev) => ({ ...prev, imageUrl: url }));
+      else Alert.alert('Error', 'Failed to upload image.');
+    } catch {
+      Alert.alert('Error', 'Failed to upload image.');
+    } finally {
+      setUploadingCover(false);
+    }
+  }
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <SafeAreaView style={[styles.safe, { width: winWidth }]} edges={['top']}>
+      <SafeAreaView style={[styles.safe, { width: winWidth, backgroundColor: colors.background }]} edges={['top']}>
         <KeyboardAvoidingView
           style={styles.container}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + BANNER_HEIGHT + 80 : 0}>
-          {/* Event Header: Warm & minimal — no gradient, blends with background */}
-          <View style={styles.eventHeader}>
-            <View style={[styles.banner, { paddingTop: insets.top + 8, minHeight: BANNER_HEIGHT + insets.top }]}>
-              <View style={styles.bannerTop}>
-                <TouchableOpacity
-                  onPress={() => router.back()}
-                  hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-                  style={styles.bannerBack}
-                  activeOpacity={0.8}>
-                  <Ionicons name="chevron-back" size={28} color="#2D1B3D" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setInfoModalVisible(true)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  style={styles.bannerInfo}
-                  activeOpacity={0.8}>
-                  <Ionicons name="information-circle-outline" size={26} color="#2D1B3D" />
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.bannerTitle} numberOfLines={2}>
+          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + HEADER_MIN_HEIGHT + 24 : 0}>
+          {/* Telegram-style Header: Back | Title+Subtitle (tap -> details) | Avatar */}
+          <View style={[styles.tgHeader, { paddingTop: 8, backgroundColor: colors.background }]}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              style={styles.tgHeaderBack}
+              activeOpacity={0.8}>
+              <Ionicons name="chevron-back" size={28} color={colors.text} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.tgHeaderCenter}
+              onPress={() => setShowDetails(true)}
+              activeOpacity={0.8}>
+              <Text style={[styles.tgTitle, { color: colors.text }]} numberOfLines={1}>
                 {event?.title ?? 'Event'}
               </Text>
-            </View>
+              <Text style={[styles.tgSubtitle, { color: colors.textMuted }]} numberOfLines={1}>
+                {goingParticipants.length} participants
+              </Text>
+            </TouchableOpacity>
 
-            <View style={styles.eventInfoRow}>
-              <View style={styles.eventInfoItem}>
-                <Ionicons name="calendar-outline" size={18} color="#FF9F66" />
-                <Text style={styles.eventInfoText}>{event ? formatEventDate(event.created_at) : '—'}</Text>
-              </View>
-              <View style={styles.eventInfoItem}>
-                <Ionicons name="location-outline" size={18} color="#FF9F66" />
-                <Text style={styles.eventInfoText} numberOfLines={1}>
-                  {event?.meeting_place ?? event?.place_name ?? '—'}
-                </Text>
-              </View>
-              <View style={styles.eventInfoItem}>
-                <Ionicons name="people-outline" size={18} color="#FF9F66" />
-                <Text style={styles.eventInfoText}>{goingParticipants.length} going</Text>
-              </View>
-            </View>
-
-            {(displayAvatars.length > 0 || extraCount > 0) && (
-              <View style={styles.whoGoingRow}>
-                <Text style={styles.whoGoingLabel}>Who&apos;s going</Text>
-                <View style={styles.avatarStack}>
-                  {displayAvatars.map((p, idx) => (
-                    <View
-                      key={p.id}
-                      style={[
-                        styles.avatarStackItem,
-                        { marginLeft: idx === 0 ? 0 : AVATAR_OVERLAP, zIndex: displayAvatars.length - idx },
-                      ]}>
-                      {p.avatar_url ? (
-                        <Image source={{ uri: p.avatar_url }} style={styles.avatarStackImg} />
-                      ) : (
-                        <View style={styles.avatarStackPlaceholder}>
-                          <Text style={styles.avatarStackPlaceholderText}>{p.name.charAt(0).toUpperCase()}</Text>
-                        </View>
-                      )}
-                    </View>
-                  ))}
-                  {extraCount > 0 && (
-                    <View
-                      style={[
-                        styles.avatarStackItem,
-                        styles.avatarStackMore,
-                        { marginLeft: AVATAR_OVERLAP, zIndex: 0 },
-                      ]}>
-                      <Text style={styles.avatarStackMoreText}>+{extraCount}</Text>
-                    </View>
-                  )}
+            <View style={styles.tgHeaderRight}>
+              {goingParticipants[0]?.avatar_url ? (
+                <Image source={{ uri: goingParticipants[0].avatar_url }} style={styles.tgHeaderAvatar} />
+              ) : (
+                <View style={styles.tgHeaderAvatarPlaceholder}>
+                  <Text style={styles.tgHeaderAvatarEmoji}>{event?.emoji ?? '📍'}</Text>
                 </View>
-              </View>
-            )}
+              )}
+            </View>
           </View>
 
           {/* Message List (inverted) */}
@@ -373,7 +429,7 @@ export default function EventDetailsScreen() {
                 return (
                   <View style={styles.sepWrap}>
                     <View style={styles.sepPill}>
-                      <Text style={styles.sepText}>{item.label}</Text>
+                      <Text style={[styles.sepText, { color: colors.textMuted }]}>{item.label}</Text>
                     </View>
                   </View>
                 );
@@ -415,10 +471,10 @@ export default function EventDetailsScreen() {
                   <View style={styles.msgContent}>
                     {!mine ? (
                       <TouchableOpacity onPress={handleAvatarPress} activeOpacity={0.7}>
-                        <Text style={styles.sender}>{msg.author.name}</Text>
+                        <Text style={[styles.sender, { color: colors.textMuted }]}>{msg.author.name}</Text>
                       </TouchableOpacity>
                     ) : null}
-                    <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}>
+                    <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther, !mine && { backgroundColor: colors.card }]}>
                       {mine ? (
                         <LinearGradient
                           colors={['#FF9F66', '#FF8C50']}
@@ -451,10 +507,10 @@ export default function EventDetailsScreen() {
                               style={[styles.bubbleImage, { width: bubbleImageSize, height: bubbleImageSize }]}
                             />
                           ) : (
-                            <Text style={styles.bubbleTextOther}>{msg.body}</Text>
+                            <Text style={[styles.bubbleTextOther, { color: colors.text }]}>{msg.body}</Text>
                           )}
                           <View style={styles.bubbleMeta}>
-                            <Text style={styles.bubbleTimeOther}>
+                            <Text style={[styles.bubbleTimeOther, { color: colors.textMuted }]}>
                               {new Date(msg.created_at).toLocaleTimeString('ru-RU', {
                                 hour: '2-digit',
                                 minute: '2-digit',
@@ -471,25 +527,25 @@ export default function EventDetailsScreen() {
           />
 
           {/* Advanced Input Bar */}
-          <View style={[styles.inputBar, { paddingBottom: 10 + insets.bottom }]}>
+          <View style={[styles.inputBar, { paddingBottom: 10 + insets.bottom, backgroundColor: colors.card, borderTopColor: colors.border }]}>
             <TouchableOpacity
               style={[styles.attachButton, !uploading && !sending && styles.attachButtonActive]}
               onPress={handlePickImage}
               disabled={sending || uploading}>
               {uploading ? (
-                <ActivityIndicator size="small" color="#FF9F66" />
+                <ActivityIndicator size="small" color={colors.accent} />
               ) : (
-                <Ionicons name="add" size={26} color={uploading || sending ? '#8B7A9B' : '#2D1B3D'} />
+                <Ionicons name="add" size={26} color={uploading || sending ? colors.textMuted : colors.text} />
               )}
             </TouchableOpacity>
 
-            <View style={styles.inputWrapper}>
+            <View style={[styles.inputWrapper, { backgroundColor: colors.background }]}>
               <TextInput
                 value={text}
                 onChangeText={setText}
                 placeholder="Message…"
-                placeholderTextColor="#8B7A9B"
-                style={styles.input}
+                placeholderTextColor={colors.textMuted}
+                style={[styles.input, { color: colors.text }]}
                 multiline
                 maxLength={2000}
               />
@@ -499,7 +555,7 @@ export default function EventDetailsScreen() {
                   Keyboard.dismiss();
                   setIsEmojiOpen((v) => !v);
                 }}>
-                <Ionicons name="happy-outline" size={22} color="#8B7A9B" />
+                <Ionicons name="happy-outline" size={22} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -508,12 +564,12 @@ export default function EventDetailsScreen() {
               onPress={onSend}
               disabled={!hasText || sending}>
               {sending ? (
-                <Text style={styles.sendButtonText}>…</Text>
+                <Text style={[styles.sendButtonText, { color: colors.textMuted }]}>…</Text>
               ) : (
                 <Ionicons
                   name="send"
                   size={20}
-                  color={hasText ? '#FFFFFF' : '#8B7A9B'}
+                  color={hasText ? '#FFFFFF' : colors.textMuted}
                 />
               )}
             </TouchableOpacity>
@@ -526,104 +582,232 @@ export default function EventDetailsScreen() {
             enableSearchBar
             theme={{
               backdrop: 'transparent',
-              knob: '#D9D3DF',
-              container: '#F5F5F7',
-              header: '#F5F5F7',
-              category: { icon: '#8B7A9B', iconActive: '#FF9F66' },
+              knob: colors.textMuted,
+              container: colors.card,
+              header: colors.card,
+              category: { icon: colors.textMuted, iconActive: colors.accent },
               search: {
-                background: '#FFFFFF',
-                text: '#2D1B3D',
-                placeholder: '#8B7A9B',
-                icon: '#8B7A9B',
+                background: colors.card,
+                text: colors.text,
+                placeholder: colors.textMuted,
+                icon: colors.textMuted,
               },
             }}
           />
         </KeyboardAvoidingView>
       </SafeAreaView>
 
-      {/* Info Modal: Event details, Join, Participants */}
+      {/* Event Details Modal (Telegram Group Info style) */}
       <Modal
-        visible={infoModalVisible}
+        visible={showDetails}
         animationType="slide"
-        transparent
-        onRequestClose={() => setInfoModalVisible(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setInfoModalVisible(false)}>
-          <Pressable
-            style={[
-              styles.modalSheet,
-              { paddingBottom: insets.bottom + 24, maxHeight: winHeight * 0.88 },
-            ]}
-            onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHandle} />
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalContent}>
-              <LinearGradient
-                colors={['#FF9F66', '#E879A0', '#8B5CF6']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.modalBanner}>
-                <Text style={styles.modalBannerTitle}>{event?.title ?? 'Event'}</Text>
-              </LinearGradient>
-              <View style={styles.modalInfoBlock}>
-                <View style={styles.modalInfoRow}>
-                  <Ionicons name="calendar-outline" size={20} color="#6E6E73" />
-                  <Text style={styles.modalInfoText}>{event ? formatEventDate(event.created_at) : '—'}</Text>
-                </View>
-                <View style={styles.modalInfoRow}>
-                  <Ionicons name="location-outline" size={20} color="#6E6E73" />
-                  <Text style={styles.modalInfoText}>{event?.meeting_place ?? event?.place_name ?? '—'}</Text>
-                </View>
-                <View style={styles.modalInfoRow}>
-                  <Ionicons name="people-outline" size={20} color="#6E6E73" />
-                  <Text style={styles.modalInfoText}>{goingParticipants.length} participants</Text>
-                </View>
+        onRequestClose={() => setShowDetails(false)}>
+        <View style={[styles.detailsModalRoot, { paddingTop: insets.top, backgroundColor: colors.background }]}>
+          {/* Top bar: Close (left); Edit / Cancel+Save (right, creator only) */}
+          <View style={styles.detailsModalBar}>
+            <TouchableOpacity
+              onPress={() => {
+                if (isEditing) cancelEditing();
+                setShowDetails(false);
+              }}
+              style={styles.detailsModalClose}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Ionicons name="close" size={28} color={colors.text} />
+            </TouchableOpacity>
+            {isCreator && (
+              <View style={styles.detailsModalBarRight}>
+                {!isEditing ? (
+                  <TouchableOpacity onPress={startEditing} style={styles.detailsModalBarBtn} hitSlop={12}>
+                    <Ionicons name="pencil" size={24} color={colors.text} />
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    <TouchableOpacity onPress={cancelEditing} style={styles.detailsModalBarBtn} hitSlop={12}>
+                      <Ionicons name="close-circle-outline" size={24} color={colors.textMuted} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleSaveEvent}
+                      disabled={isSaving}
+                      style={styles.detailsModalBarBtn}
+                      hitSlop={12}>
+                      {isSaving ? (
+                        <ActivityIndicator size="small" color={colors.accent} />
+                      ) : (
+                        <Ionicons name="checkmark-circle" size={24} color={colors.accent} />
+                      )}
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
-              {displayAvatars.length > 0 || extraCount > 0 ? (
-                <View style={styles.modalWhoGoing}>
-                  <Text style={styles.whoGoingLabel}>Who&apos;s going</Text>
-                  <View style={styles.avatarStack}>
-                    {displayAvatars.map((p, idx) => (
-                      <View
-                        key={p.id}
-                        style={[
-                          styles.avatarStackItem,
-                          { marginLeft: idx === 0 ? 0 : AVATAR_OVERLAP, zIndex: displayAvatars.length - idx },
-                        ]}>
-                        {p.avatar_url ? (
-                          <Image source={{ uri: p.avatar_url }} style={styles.avatarStackImg} />
-                        ) : (
-                          <View style={styles.avatarStackPlaceholder}>
-                            <Text style={styles.avatarStackPlaceholderText}>{p.name.charAt(0).toUpperCase()}</Text>
-                          </View>
-                        )}
-                      </View>
-                    ))}
-                    {extraCount > 0 && (
-                      <View
-                        style={[
-                          styles.avatarStackItem,
-                          styles.avatarStackMore,
-                          { marginLeft: AVATAR_OVERLAP, zIndex: 0 },
-                        ]}>
-                        <Text style={styles.avatarStackMoreText}>+{extraCount}</Text>
-                      </View>
+            )}
+          </View>
+
+          <ScrollView
+            style={styles.detailsModalScroll}
+            contentContainerStyle={[styles.detailsModalContent, { paddingBottom: insets.bottom + 32 }]}
+            showsVerticalScrollIndicator={false}>
+            {/* Hero: Cover image or placeholder; in edit mode touchable + overlay + camera */}
+            {(() => {
+              const coverUrl = isEditing ? editForm.imageUrl : (event?.cover_image_url ?? null);
+              const heroContent = coverUrl ? (
+                <Image source={{ uri: coverUrl }} style={styles.detailsHeroImage} resizeMode="cover" />
+              ) : (
+                <View style={styles.detailsHeroPlaceholder}>
+                  <Text style={styles.detailsHeroEmoji}>{event?.emoji ?? '📍'}</Text>
+                  <Text style={[styles.detailsHeroTitle, { color: colors.text }]} numberOfLines={2}>
+                    {isEditing ? editForm.title || 'Event' : event?.title ?? 'Event'}
+                  </Text>
+                </View>
+              );
+              const wrapped = isEditing ? (
+                <TouchableOpacity
+                  style={styles.detailsHeroTouchable}
+                  onPress={pickAndUploadImage}
+                  disabled={uploadingCover}
+                  activeOpacity={0.9}>
+                  {heroContent}
+                  <View style={styles.detailsHeroOverlay}>
+                    {uploadingCover ? (
+                      <ActivityIndicator size="large" color="#FFF" />
+                    ) : (
+                      <Ionicons name="camera" size={36} color="#FFF" />
                     )}
                   </View>
+                </TouchableOpacity>
+              ) : (
+                heroContent
+              );
+              return (
+                <View style={[styles.detailsHero, { backgroundColor: colors.card }]}>
+                  {wrapped}
                 </View>
-              ) : null}
-              {event?.description ? <ThemedText style={styles.desc}>{event.description}</ThemedText> : null}
-              {event?.meeting_lat != null && event?.meeting_lng != null && (
-                <Pressable
-                  style={styles.openOnMap}
-                  onPress={() =>
+              );
+            })()}
+
+            {/* Info: Title & Date, Location, Description (editable when isEditing) */}
+            <View style={[styles.detailsInfoBlock, { backgroundColor: colors.card }]}>
+              {isEditing ? (
+                <>
+                  <TextInput
+                    value={editForm.title}
+                    onChangeText={(t) => setEditForm((prev) => ({ ...prev, title: t }))}
+                    placeholder="Event title"
+                    placeholderTextColor={colors.textMuted}
+                    style={[styles.detailsEditTitle, { color: colors.text, borderColor: colors.border }]}
+                  />
+                  <TextInput
+                    value={editForm.description}
+                    onChangeText={(t) => setEditForm((prev) => ({ ...prev, description: t }))}
+                    placeholder="Description (optional)"
+                    placeholderTextColor={colors.textMuted}
+                    multiline
+                    style={[styles.detailsEditDesc, { color: colors.text, borderColor: colors.border }]}
+                  />
+                </>
+              ) : (
+                <Text style={[styles.detailsInfoTitle, { color: colors.text }]}>{event?.title ?? 'Event'}</Text>
+              )}
+              <View style={styles.detailsInfoRow}>
+                <Ionicons name="calendar-outline" size={18} color={colors.textMuted} />
+                <Text style={[styles.detailsInfoText, { color: colors.text }]}>{event ? formatEventDate(event.created_at) : '—'}</Text>
+              </View>
+              <Pressable
+                style={styles.detailsInfoRow}
+                onPress={() => {
+                  if (event?.meeting_lat != null && event?.meeting_lng != null) {
                     Linking.openURL(
                       `https://2gis.kg/bishkek?m=${encodeURIComponent(`${event.meeting_lng},${event.meeting_lat}/16`)}`
-                    )
-                  }>
-                  <ThemedText type="defaultSemiBold" style={styles.openOnMapText}>Открыть в 2ГИС</ThemedText>
-                </Pressable>
-              )}
+                    );
+                  }
+                }}>
+                <Ionicons name="location-outline" size={18} color={colors.accent} />
+                <Text style={[styles.detailsInfoText, { color: colors.text }]} numberOfLines={2}>
+                  {event?.meeting_place ?? event?.place_name ?? '—'}
+                </Text>
+                {(event?.meeting_lat != null && event?.meeting_lng != null) && (
+                  <Text style={[styles.detailsInfoLink, { color: colors.accent }]}>Open in maps</Text>
+                )}
+              </Pressable>
+              {!isEditing && event?.description ? (
+                <Text style={[styles.detailsDesc, { color: colors.textMuted }]}>{event.description}</Text>
+              ) : null}
+            </View>
 
-              {event && myUserId && !isCreator && (
+            {/* Action buttons: Copy Link, Edit (if creator) */}
+            <View style={styles.detailsActionsRow}>
+              <TouchableOpacity style={[styles.detailsActionBtn, { backgroundColor: colors.card }]} onPress={handleCopyLink} activeOpacity={0.8}>
+                <Ionicons name="link" size={20} color={colors.text} />
+                <Text style={[styles.detailsActionBtnText, { color: colors.text }]}>Copy Link</Text>
+              </TouchableOpacity>
+              {isCreator && !isEditing && (
+                <TouchableOpacity
+                  style={[styles.detailsActionBtn, { backgroundColor: colors.card }]}
+                  onPress={startEditing}
+                  activeOpacity={0.8}>
+                  <Ionicons name="pencil" size={20} color={colors.text} />
+                  <Text style={[styles.detailsActionBtnText, { color: colors.text }]}>Edit</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Members */}
+            <View style={styles.detailsMembersSection}>
+              <Text style={[styles.detailsMembersTitle, { color: colors.text }]}>Members</Text>
+              {participantsWithStatus.length === 0 ? (
+                <Text style={[styles.detailsMembersEmpty, { color: colors.textMuted }]}>No participants yet</Text>
+              ) : (
+                participantsWithStatus
+                  .filter((p) => p.status === 'approved' || p.status === 'pending')
+                  .map((p) => (
+                    <View key={p.id} style={[styles.detailsMemberRow, { backgroundColor: colors.card }]}>
+                      {p.avatar_url ? (
+                        <Image source={{ uri: p.avatar_url }} style={styles.detailsMemberAvatar} />
+                      ) : (
+                        <View style={styles.detailsMemberAvatarPlaceholder}>
+                          <Text style={styles.detailsMemberAvatarText}>{p.name.charAt(0).toUpperCase()}</Text>
+                        </View>
+                      )}
+                      <Text style={[styles.detailsMemberName, { color: colors.text }]}>{p.name}</Text>
+                      {p.status === 'pending' && (
+                        <View style={[styles.detailsMemberBadge, { backgroundColor: colors.border }]}>
+                          <Text style={[styles.detailsMemberBadgeText, { color: colors.textMuted }]}>Pending</Text>
+                        </View>
+                      )}
+                      {isCreator && p.status === 'pending' && (
+                        <View style={styles.detailsMemberActions}>
+                          <TouchableOpacity
+                            style={styles.detailsAcceptBtn}
+                            onPress={async () => {
+                              try {
+                                await updateParticipantStatus(eventId, p.id, 'approved');
+                                await load();
+                              } catch (e) {
+                                setError(e instanceof Error ? e.message : 'Ошибка');
+                              }
+                            }}>
+                            <Text style={styles.detailsAcceptBtnText}>Accept</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.detailsDeclineBtn}
+                            onPress={async () => {
+                              try {
+                                await updateParticipantStatus(eventId, p.id, 'rejected');
+                                await load();
+                              } catch (e) {
+                                setError(e instanceof Error ? e.message : 'Ошибка');
+                              }
+                            }}>
+                            <Text style={styles.detailsDeclineBtnText}>Decline</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  ))
+              )}
+            </View>
+
+            {/* Join / Status for non-creator */}
+            {event && myUserId && !isCreator && (
                 <View style={styles.joinSection}>
                   {myParticipantStatus === null && (
                     <Pressable
@@ -662,88 +846,16 @@ export default function EventDetailsScreen() {
                 </View>
               )}
 
-              {event && isCreator && participantsWithStatus.length > 0 && (
-                <View style={styles.participantsSection}>
-                  {participantsWithStatus.filter((p) => p.status === 'pending').length > 0 && (
-                    <View style={styles.participantsBlock}>
-                      <ThemedText type="defaultSemiBold" style={styles.participantsBlockTitle}>Requests</ThemedText>
-                      {participantsWithStatus
-                        .filter((p) => p.status === 'pending')
-                        .map((p) => (
-                          <View key={p.id} style={styles.participantRow}>
-                            <View style={styles.participantInfo}>
-                              {p.avatar_url ? (
-                                <Image source={{ uri: p.avatar_url }} style={styles.participantAvatar} />
-                              ) : (
-                                <View style={styles.participantAvatarPlaceholder}>
-                                  <Text style={styles.participantAvatarText}>{p.name.charAt(0).toUpperCase()}</Text>
-                                </View>
-                              )}
-                              <ThemedText type="defaultSemiBold" style={styles.participantName}>{p.name}</ThemedText>
-                            </View>
-                            <View style={styles.participantActions}>
-                              <Pressable
-                                style={styles.acceptButton}
-                                onPress={async () => {
-                                  try {
-                                    await updateParticipantStatus(eventId, p.id, 'approved');
-                                    await load();
-                                  } catch (e) {
-                                    setError(e instanceof Error ? e.message : 'Ошибка');
-                                  }
-                                }}>
-                                <Text style={styles.acceptButtonText}>✅ Accept</Text>
-                              </Pressable>
-                              <Pressable
-                                style={styles.declineButton}
-                                onPress={async () => {
-                                  try {
-                                    await updateParticipantStatus(eventId, p.id, 'rejected');
-                                    await load();
-                                  } catch (e) {
-                                    setError(e instanceof Error ? e.message : 'Ошибка');
-                                  }
-                                }}>
-                                <Text style={styles.declineButtonText}>❌ Decline</Text>
-                              </Pressable>
-                            </View>
-                          </View>
-                        ))}
-                    </View>
-                  )}
-                  {participantsWithStatus.filter((p) => p.status === 'approved').length > 0 && (
-                    <View style={styles.participantsBlock}>
-                      <ThemedText type="defaultSemiBold" style={styles.participantsBlockTitle}>Going</ThemedText>
-                      {participantsWithStatus
-                        .filter((p) => p.status === 'approved')
-                        .map((p) => (
-                          <View key={p.id} style={styles.participantRow}>
-                            {p.avatar_url ? (
-                              <Image source={{ uri: p.avatar_url }} style={styles.participantAvatar} />
-                            ) : (
-                              <View style={styles.participantAvatarPlaceholder}>
-                                <Text style={styles.participantAvatarText}>{p.name.charAt(0).toUpperCase()}</Text>
-                              </View>
-                            )}
-                            <ThemedText type="defaultSemiBold" style={styles.participantName}>{p.name}</ThemedText>
-                          </View>
-                        ))}
-                    </View>
-                  )}
-                </View>
-              )}
+            {isCreator && (
+              <TouchableOpacity style={styles.deleteButtonModal} onPress={handleDelete}>
+                <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
+                <Text style={styles.deleteButtonModalText}>Удалить ивент</Text>
+              </TouchableOpacity>
+            )}
 
-              {isCreator && (
-                <Pressable style={styles.deleteButtonModal} onPress={handleDelete}>
-                  <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
-                  <ThemedText style={styles.deleteButtonModalText}>Удалить ивент</ThemedText>
-                </Pressable>
-              )}
-
-              {error ? <ThemedText style={styles.err}>Ошибка: {error}</ThemedText> : null}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
+            {error ? <Text style={styles.err}>Ошибка: {error}</Text> : null}
+          </ScrollView>
+        </View>
       </Modal>
     </>
   );
@@ -752,105 +864,60 @@ export default function EventDetailsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFF5F0' },
   container: { flex: 1 },
-  eventHeader: {
-    flex: 0,
-    backgroundColor: '#FFF5F0',
-  },
-  banner: {
-    backgroundColor: '#FFF5F0',
-    paddingHorizontal: 12,
-    paddingBottom: 16,
-    justifyContent: 'space-between',
-  },
-  bannerTop: {
+  // Telegram-style header
+  tgHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingBottom: 10,
+    backgroundColor: '#FFF5F0',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(45,27,61,0.08)',
   },
-  bannerBack: { padding: 10, marginRight: 4 },
-  bannerInfo: { padding: 10, marginLeft: 4 },
-  bannerTitle: {
-    fontSize: 24,
+  tgHeaderBack: {
+    padding: 10,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tgHeaderCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    minHeight: 44,
+  },
+  tgTitle: {
+    fontSize: 17,
     fontWeight: '700',
     color: '#2D1B3D',
-    marginTop: 'auto',
   },
-  eventInfoRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 16,
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 8,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  eventInfoItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: 0,
-  },
-  eventInfoText: {
+  tgSubtitle: {
     fontSize: 13,
-    color: '#2D1B3D',
-    flex: 1,
+    color: '#8B7A9B',
+    marginTop: 2,
   },
-  whoGoingRow: {
-    flexDirection: 'row',
+  tgHeaderRight: {
+    width: TG_HEADER_AVATAR + 8,
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-    gap: 12,
+    justifyContent: 'center',
   },
-  whoGoingLabel: {
-    fontSize: 13,
-    color: '#6E6E73',
+  tgHeaderAvatar: {
+    width: TG_HEADER_AVATAR,
+    height: TG_HEADER_AVATAR,
+    borderRadius: TG_HEADER_AVATAR / 2,
   },
-  avatarStack: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarStackItem: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#FFF5F0',
-  },
-  avatarStackImg: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarStackPlaceholder: {
-    width: '100%',
-    height: '100%',
+  tgHeaderAvatarPlaceholder: {
+    width: TG_HEADER_AVATAR,
+    height: TG_HEADER_AVATAR,
+    borderRadius: TG_HEADER_AVATAR / 2,
     backgroundColor: '#FFE5D4',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarStackPlaceholderText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FF9F66',
-  },
-  avatarStackMore: {
-    backgroundColor: 'rgba(45,27,61,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarStackMoreText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2D1B3D',
+  tgHeaderAvatarEmoji: {
+    fontSize: 18,
   },
   chatList: { flex: 1 },
   chatContent: {
@@ -987,71 +1054,232 @@ const styles = StyleSheet.create({
   },
   sendButtonText: { color: '#8B7A9B', fontSize: 18 },
 
-  modalOverlay: {
+  // Event Details Modal (full-screen, Telegram Group Info style)
+  detailsModalRoot: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
     backgroundColor: '#FFF5F0',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '85%',
   },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 8,
+  detailsModalBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
-  modalContent: { paddingBottom: 32 },
-  modalBanner: {
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-    marginHorizontal: 20,
-    marginTop: 8,
-    borderRadius: 24,
+  detailsModalClose: {
+    padding: 8,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailsModalScroll: { flex: 1 },
+  detailsModalContent: { paddingHorizontal: 20, paddingTop: 8 },
+  detailsHero: {
+    height: 160,
+    borderRadius: 20,
     overflow: 'hidden',
+    marginBottom: 16,
+    backgroundColor: 'rgba(255,159,102,0.2)',
   },
-  modalBannerTitle: {
-    fontSize: 22,
+  detailsHeroPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  detailsHeroEmoji: { fontSize: 48, marginBottom: 8 },
+  detailsHeroTitle: {
+    fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#2D1B3D',
+    textAlign: 'center',
   },
-  modalInfoBlock: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 16,
-    marginHorizontal: 20,
-    marginTop: 12,
+  detailsHeroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  detailsHeroTouchable: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  detailsHeroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailsModalBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
+  },
+  detailsModalBarBtn: {
+    padding: 4,
+  },
+  detailsEditTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  detailsEditDesc: {
+    fontSize: 15,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    marginTop: 0,
+  },
+  detailsInfoBlock: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  modalInfoRow: {
+  detailsInfoTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2D1B3D',
+    marginBottom: 12,
+  },
+  detailsInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginBottom: 8,
   },
-  modalInfoText: {
+  detailsInfoText: {
+    flex: 1,
     fontSize: 15,
     color: '#2D1B3D',
-    flex: 1,
   },
-  modalWhoGoing: {
+  detailsInfoLink: {
+    fontSize: 13,
+    color: '#FF9F66',
+    fontWeight: '600',
+  },
+  detailsDesc: {
+    fontSize: 15,
+    color: '#6E6E73',
+    lineHeight: 22,
+    marginTop: 8,
+  },
+  detailsActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  detailsActionBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    gap: 12,
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  desc: { color: '#6E6E73', marginBottom: 12, marginHorizontal: 20, marginTop: 12 },
+  detailsActionBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#2D1B3D',
+  },
+  detailsMembersSection: {
+    marginBottom: 16,
+  },
+  detailsMembersTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2D1B3D',
+    marginBottom: 12,
+  },
+  detailsMembersEmpty: {
+    fontSize: 14,
+    color: '#8B7A9B',
+  },
+  detailsMemberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    marginBottom: 8,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  detailsMemberAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  detailsMemberAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFE5D4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailsMemberAvatarText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FF9F66',
+  },
+  detailsMemberName: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#2D1B3D',
+  },
+  detailsMemberBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(139,122,155,0.2)',
+  },
+  detailsMemberBadgeText: {
+    fontSize: 12,
+    color: '#8B7A9B',
+  },
+  detailsMemberActions: { flexDirection: 'row', gap: 8 },
+  detailsAcceptBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#4CAF50',
+  },
+  detailsAcceptBtnText: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
+  detailsDeclineBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,107,107,0.9)',
+  },
+  detailsDeclineBtnText: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
+  joinSection: { marginBottom: 16, marginHorizontal: 0 },
   openOnMap: {
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
@@ -1084,45 +1312,6 @@ const styles = StyleSheet.create({
   statusBadgeTextRejected: { color: '#FF6B6B', fontSize: 14 },
   statusBadgeApproved: { backgroundColor: 'rgba(76,175,80,0.15)' },
   statusBadgeTextApproved: { color: '#4CAF50', fontSize: 14 },
-  participantsSection: { gap: 16, marginBottom: 16, marginHorizontal: 20 },
-  participantsBlock: { gap: 10 },
-  participantsBlockTitle: { fontSize: 14, color: '#6E6E73', marginBottom: 4 },
-  participantRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,245,240,0.9)',
-  },
-  participantInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  participantAvatar: { width: 36, height: 36, borderRadius: 18 },
-  participantAvatarPlaceholder: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFE5D4',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  participantAvatarText: { fontSize: 16, fontWeight: '600', color: '#FF9F66' },
-  participantName: { fontSize: 15, color: '#2D1B3D' },
-  participantActions: { flexDirection: 'row', gap: 8 },
-  acceptButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: '#4CAF50',
-  },
-  acceptButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
-  declineButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,107,107,0.9)',
-  },
-  declineButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
   deleteButtonModal: {
     flexDirection: 'row',
     alignItems: 'center',
