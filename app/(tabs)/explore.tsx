@@ -1,19 +1,22 @@
 import { Link, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { listEvents, type LocalEvent } from '@/lib/local-events';
+import { useTheme } from '@/lib/theme';
 
 export default function EventsScreen() {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const [events, setEvents] = React.useState<LocalEvent[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
+  const load = React.useCallback(async (showLoadingSpinner = false) => {
+    if (showLoadingSpinner) setLoading(true);
     setError(null);
     try {
       const rows = await listEvents();
@@ -26,9 +29,15 @@ export default function EventsScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      void load();
+      void load(true); // initial load: show loading for empty state
     }, [load])
   );
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await load(false);
+    setRefreshing(false);
+  }, [load]);
 
   function formatDate(dateString: string): string {
     const date = new Date(dateString);
@@ -46,13 +55,13 @@ export default function EventsScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: 16 + insets.top }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: 16 + insets.top }]}>
       <View style={styles.header}>
-        <ThemedText type="title" style={styles.headerTitle}>
+        <ThemedText type="title" style={[styles.headerTitle, { color: colors.text }]}>
           Ивенты
         </ThemedText>
         <Link href="/create-event" asChild>
-          <Pressable style={styles.createButton}>
+          <Pressable style={[styles.createButton, { backgroundColor: colors.accent }]}>
             <ThemedText type="defaultSemiBold" style={styles.createButtonText}>
               + Создать
             </ThemedText>
@@ -61,23 +70,24 @@ export default function EventsScreen() {
       </View>
 
       {error ? (
-        <View style={styles.errorCard}>
-          <ThemedText style={styles.errorText}>Ошибка: {error}</ThemedText>
+        <View style={[styles.errorCard, { backgroundColor: colors.border }]}>
+          <ThemedText style={[styles.errorText, { color: colors.accent }]}>Ошибка: {error}</ThemedText>
         </View>
       ) : null}
 
       <FlatList
         data={events}
         keyExtractor={(e) => e.id}
-        onRefresh={load}
-        refreshing={loading}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} title="" tintColor={colors.accent} />
+        }
         contentContainerStyle={[styles.listContent, { paddingBottom: 24 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           !loading ? (
-            <View style={styles.emptyCard}>
-              <ThemedText style={styles.emptyText}>Пока нет ивентов</ThemedText>
-              <ThemedText style={styles.emptySubtext}>Создайте первый ивент, чтобы начать!</ThemedText>
+            <View style={[styles.emptyCard, { backgroundColor: colors.card }]}>
+              <ThemedText style={[styles.emptyText, { color: colors.text }]}>Пока нет ивентов</ThemedText>
+              <ThemedText style={[styles.emptySubtext, { color: colors.textMuted }]}>Создайте первый ивент, чтобы начать!</ThemedText>
             </View>
           ) : (
             <View />
@@ -85,31 +95,31 @@ export default function EventsScreen() {
         }
         renderItem={({ item }) => (
           <Link href={{ pathname: '/event/[id]', params: { id: item.id } }} asChild>
-            <Pressable style={styles.card}>
+            <Pressable style={[styles.card, { backgroundColor: colors.card }]}>
               <View style={styles.cardHeader}>
-                <ThemedText type="title" style={styles.cardTitle}>
+                <ThemedText type="title" style={[styles.cardTitle, { color: colors.text }]}>
                   {item.title}
                 </ThemedText>
-                <ThemedText style={styles.cardTime}>{formatDate(item.created_at)}</ThemedText>
+                <ThemedText style={[styles.cardTime, { color: colors.textMuted }]}>{formatDate(item.created_at)}</ThemedText>
               </View>
 
               {item.description ? (
-                <ThemedText style={styles.cardDescription} numberOfLines={2}>
+                <ThemedText style={[styles.cardDescription, { color: colors.text }]} numberOfLines={2}>
                   {item.description}
                 </ThemedText>
               ) : null}
 
               {item.meeting_place ? (
-                <View style={styles.locationRow}>
+                <View style={[styles.locationRow, { backgroundColor: colors.border }]}>
                   <ThemedText style={styles.locationEmoji}>📍</ThemedText>
-                  <ThemedText type="defaultSemiBold" style={styles.locationText}>
+                  <ThemedText type="defaultSemiBold" style={[styles.locationText, { color: colors.accent }]}>
                     {item.meeting_place}
                   </ThemedText>
                 </View>
               ) : null}
 
               <View style={styles.cardFooter}>
-                <Pressable style={styles.detailsButton}>
+                <Pressable style={[styles.detailsButton, { backgroundColor: colors.accent }]}>
                   <ThemedText type="defaultSemiBold" style={styles.detailsButtonText}>
                     Подробнее →
                   </ThemedText>
@@ -124,10 +134,7 @@ export default function EventsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFF5F0', // Warm peach background
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -135,15 +142,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
-  headerTitle: {
-    fontSize: 28,
-    color: '#2D1B3D',
-  },
+  headerTitle: { fontSize: 28 },
   createButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
-    backgroundColor: '#FF9F66', // Accent color
     shadowColor: '#FF9F66',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -159,19 +162,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 12,
     borderRadius: 12,
-    backgroundColor: '#FFE5D4',
   },
-  errorText: {
-    color: '#FF6B35',
-    fontSize: 13,
-  },
+  errorText: { fontSize: 13 },
   listContent: {
     padding: 16,
     gap: 16,
     paddingBottom: 40,
   },
   emptyCard: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 32,
     alignItems: 'center',
@@ -182,17 +180,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  emptyText: {
-    fontSize: 16,
-    color: '#2D1B3D',
-    fontWeight: '600',
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#8B7A9B',
-  },
+  emptyText: { fontSize: 16, fontWeight: '600' },
+  emptySubtext: { fontSize: 14 },
   card: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 20,
     shadowColor: '#FF9F66',
@@ -208,21 +198,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 12,
   },
-  cardTitle: {
-    flex: 1,
-    fontSize: 20,
-    color: '#2D1B3D',
-  },
-  cardTime: {
-    fontSize: 12,
-    color: '#8B7A9B',
-    marginTop: 2,
-  },
-  cardDescription: {
-    fontSize: 15,
-    color: '#4A3A5A',
-    lineHeight: 20,
-  },
+  cardTitle: { flex: 1, fontSize: 20 },
+  cardTime: { fontSize: 12, marginTop: 2 },
+  cardDescription: { fontSize: 15, lineHeight: 20 },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -230,25 +208,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: '#FFF0E6',
   },
-  locationEmoji: {
-    fontSize: 16,
-  },
-  locationText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#FF6B35',
-  },
-  cardFooter: {
-    marginTop: 4,
-  },
+  locationEmoji: { fontSize: 16 },
+  locationText: { flex: 1, fontSize: 14 },
+  cardFooter: { marginTop: 4 },
   detailsButton: {
     alignSelf: 'flex-start',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 16,
-    backgroundColor: '#FF9F66', // Accent color
   },
   detailsButtonText: {
     color: '#FFFFFF',

@@ -6,9 +6,10 @@ import { ImageBackground, StyleSheet, View } from 'react-native';
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { LoadingScreen } from '@/components/LoadingScreen';
+import { BrandedLoading } from '@/components/BrandedLoading';
 import { ThemeProvider as AppThemeProvider, useTheme } from '@/lib/theme';
 import { checkAndSeedData } from '@/lib/seed-data';
+import { hasCompleteProfile } from '@/lib/local-profile';
 import { supabase } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
@@ -38,6 +39,7 @@ function ThemedStack() {
           headerTintColor: colors.text,
         }}>
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+        <Stack.Screen name="create-profile" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="create-event" options={{ presentation: 'modal', title: 'Создать ивент' }} />
         <Stack.Screen name="edit-profile" options={{ presentation: 'modal', title: 'Редактировать профиль' }} />
@@ -91,26 +93,58 @@ export default function RootLayout() {
     void checkAndSeedData();
   }, [isLoading, session]);
 
-  // Handle navigation after auth check is done
+  // Handle navigation after auth check: session + profile completeness
+  const [profileChecked, setProfileChecked] = React.useState(false);
+  const [hasProfile, setHasProfile] = React.useState(false);
+
   React.useEffect(() => {
-    if (isLoading) return;
+    if (!session) {
+      setProfileChecked(true);
+      setHasProfile(false);
+      return;
+    }
+    let cancelled = false;
+    setProfileChecked(false);
+    hasCompleteProfile()
+      .then((ok) => {
+        if (!cancelled) {
+          setHasProfile(ok);
+          setProfileChecked(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHasProfile(false);
+          setProfileChecked(true);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [session, segments[0]]);
+
+  React.useEffect(() => {
+    if (isLoading || !profileChecked) return;
 
     const inOnboarding = segments[0] === 'onboarding';
+    const inCreateProfile = segments[0] === 'create-profile';
     const inTabs = segments[0] === '(tabs)';
     const isAuthenticated = !!session;
 
-    if (!isAuthenticated && !inOnboarding) {
-      // Not authenticated and not on onboarding - go to onboarding
-      router.replace('/onboarding');
-    } else if (isAuthenticated && inOnboarding) {
-      // Authenticated but on onboarding - go to tabs
+    if (!isAuthenticated) {
+      if (!inOnboarding) router.replace('/onboarding');
+      return;
+    }
+
+    if (!hasProfile && !inCreateProfile) {
+      router.replace('/create-profile');
+      return;
+    }
+    if (hasProfile && (inOnboarding || inCreateProfile)) {
       router.replace('/(tabs)');
     }
-    // If authenticated and in tabs, or not authenticated and in onboarding - do nothing
-  }, [isLoading, session, segments, router]);
+  }, [isLoading, session, segments, router, profileChecked, hasProfile]);
 
   if (isLoading) {
-    return <LoadingScreen />;
+    return <BrandedLoading />;
   }
 
   return (

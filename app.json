@@ -45,6 +45,12 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Show your location on the map near events. You can disable in profile (ghost mode)."
+        }
       ]
     ],
     "experiments": {

@@ -15,6 +15,7 @@ import {
     type LocalProfile,
     type VibeIntent,
 } from '@/lib/local-profile';
+import { useTheme } from '@/lib/theme';
 
 const INTEREST_OPTIONS = [
   'Путешествия',
@@ -65,6 +66,7 @@ const POPULAR_SPOTS: Omit<FavoriteSpot, 'id'>[] = [
 
 export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const [profile, setProfile] = React.useState<LocalProfile | null>(null);
   const [name, setName] = React.useState('');
   const [bio, setBio] = React.useState('');
@@ -95,7 +97,7 @@ export default function EditProfileScreen() {
     setVibeIntent(p.vibeIntent);
     setConversationStarters([...p.conversationStarters]);
     setFavoriteSpots([...p.favoriteSpots]);
-    setPrivacy({ ...p.privacy });
+    setPrivacy({ ...p.privacy, ghostMode: p.is_ghost ?? p.privacy.ghostMode });
   }
 
   function toggleInterest(interest: string) {
@@ -147,6 +149,8 @@ export default function EditProfileScreen() {
         conversationStarters,
         favoriteSpots,
         privacy,
+        is_ghost: privacy.ghostMode,
+        ...(privacy.ghostMode ? { latitude: null, longitude: null } : {}),
       });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Готово', 'Профиль успешно сохранён', [
@@ -173,60 +177,60 @@ export default function EditProfileScreen() {
       <Stack.Screen
         options={{
           title: 'Редактировать профиль',
-          headerStyle: { backgroundColor: '#FFF5F0' },
-          headerTintColor: '#2D1B3D',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
           headerShadowVisible: false,
           headerLeft: () => (
             <TouchableOpacity
               onPress={() => router.back()}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               style={styles.headerBack}>
-              <Ionicons name="chevron-back" size={28} color="#2D1B3D" />
+              <Ionicons name="chevron-back" size={28} color={colors.text} />
             </TouchableOpacity>
           ),
         }}
       />
     <KeyboardAvoidingView
-      style={styles.keyboardAvoid}
+      style={[styles.keyboardAvoid, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={[styles.content, { paddingTop: 16 + insets.top, paddingBottom: 100 + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
         {/* White Card Container */}
-        <View style={styles.card}>
-          <ThemedText type="title" style={styles.title}>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <ThemedText type="title" style={[styles.title, { color: colors.text }]}>
             Редактировать профиль
           </ThemedText>
 
       {/* Имя */}
       <View style={styles.field}>
-        <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>Имя *</ThemedText>
-        <View style={styles.inputRow}>
-          <Ionicons name="person-outline" size={20} color="#8B7A9B" style={styles.inputIcon} />
+        <ThemedText type="defaultSemiBold" style={[styles.fieldLabel, { color: colors.text }]}>Имя *</ThemedText>
+        <View style={[styles.inputRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <Ionicons name="person-outline" size={20} color={colors.textMuted} style={styles.inputIcon} />
           <TextInput
             value={name}
             onChangeText={setName}
             placeholder="Ваше имя"
-            placeholderTextColor="#8B7A9B"
-            style={styles.input}
+            placeholderTextColor={colors.textMuted}
+            style={[styles.input, { color: colors.text }]}
           />
         </View>
       </View>
 
       {/* О себе */}
       <View style={styles.field}>
-        <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>О себе</ThemedText>
-        <View style={styles.inputRow}>
-          <Ionicons name="chatbubble-outline" size={20} color="#8B7A9B" style={styles.inputIcon} />
+        <ThemedText type="defaultSemiBold" style={[styles.fieldLabel, { color: colors.text }]}>О себе</ThemedText>
+        <View style={[styles.inputRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <Ionicons name="chatbubble-outline" size={20} color={colors.textMuted} style={styles.inputIcon} />
           <TextInput
             value={bio}
             onChangeText={setBio}
             placeholder="Расскажите о себе..."
-            placeholderTextColor="#8B7A9B"
-            style={[styles.input, styles.textarea]}
+            placeholderTextColor={colors.textMuted}
+            style={[styles.input, styles.textarea, { color: colors.text }]}
             multiline
             numberOfLines={4}
           />
@@ -235,30 +239,30 @@ export default function EditProfileScreen() {
 
       {/* Возраст */}
       <View style={styles.field}>
-        <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>Возраст</ThemedText>
-        <View style={styles.inputRow}>
-          <Ionicons name="calendar-outline" size={20} color="#8B7A9B" style={styles.inputIcon} />
+        <ThemedText type="defaultSemiBold" style={[styles.fieldLabel, { color: colors.text }]}>Возраст</ThemedText>
+        <View style={[styles.inputRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <Ionicons name="calendar-outline" size={20} color={colors.textMuted} style={styles.inputIcon} />
           <TextInput
             value={age}
             onChangeText={setAge}
             placeholder="25"
-            placeholderTextColor="#8B7A9B"
+            placeholderTextColor={colors.textMuted}
             keyboardType="numeric"
-            style={styles.input}
+            style={[styles.input, { color: colors.text }]}
           />
         </View>
       </View>
 
       {/* Пол */}
       <View style={styles.field}>
-        <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>Пол</ThemedText>
+        <ThemedText type="defaultSemiBold" style={[styles.fieldLabel, { color: colors.text }]}>Пол</ThemedText>
         <View style={styles.genderRow}>
           {(['male', 'female', 'other'] as const).map((g) => (
             <Pressable
               key={g}
-              style={[styles.genderButton, gender === g && styles.genderButtonActive]}
+              style={[styles.genderButton, { borderColor: colors.border }, gender === g && [styles.genderButtonActive, { backgroundColor: colors.accent, borderColor: colors.accent }]]}
               onPress={() => setGender(gender === g ? null : g)}>
-              <ThemedText type="defaultSemiBold" style={gender === g ? styles.genderButtonTextActive : null}>
+              <ThemedText type="defaultSemiBold" style={gender === g ? [styles.genderButtonTextActive, { color: colors.card }] : { color: colors.text }}>
                 {g === 'male' ? 'Мужской' : g === 'female' ? 'Женский' : 'Другое'}
               </ThemedText>
             </Pressable>
@@ -268,16 +272,16 @@ export default function EditProfileScreen() {
 
       {/* Vibe/Intent */}
       <View style={styles.field}>
-        <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>Что ищу</ThemedText>
+        <ThemedText type="defaultSemiBold" style={[styles.fieldLabel, { color: colors.text }]}>Что ищу</ThemedText>
         <View style={styles.vibeRow}>
           {VIBE_OPTIONS.map((vibe) => (
             <Pressable
               key={vibe}
-              style={[styles.vibeButton, vibeIntent === vibe && styles.vibeButtonActive]}
+              style={[styles.vibeButton, { borderColor: colors.border }, vibeIntent === vibe && [styles.vibeButtonActive, { backgroundColor: colors.accent, borderColor: colors.accent }]]}
               onPress={() => setVibeIntent(vibeIntent === vibe ? null : vibe)}>
               {vibeIntent === vibe && <VibeBadge vibe={vibe} size="small" />}
               {vibeIntent !== vibe && (
-                <ThemedText style={styles.vibeButtonText}>
+                <ThemedText style={[styles.vibeButtonText, { color: colors.textMuted }]}>
                   {vibe === 'just-coffee'
                     ? '☕'
                     : vibe === 'networking'
@@ -303,33 +307,34 @@ export default function EditProfileScreen() {
 
       {/* Conversation Starters */}
       <View style={styles.field}>
-        <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>Темы для разговора</ThemedText>
-        <View style={styles.startersInputRow}>
+        <ThemedText type="defaultSemiBold" style={[styles.fieldLabel, { color: colors.text }]}>Темы для разговора</ThemedText>
+        <View style={[styles.startersInputRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
           <TextInput
             value={newStarter}
             onChangeText={setNewStarter}
             placeholder="Добавить тему..."
-            style={[styles.input, styles.starterInput]}
+            placeholderTextColor={colors.textMuted}
+            style={[styles.input, styles.starterInput, { color: colors.text }]}
             onSubmitEditing={addConversationStarter}
           />
-          <Pressable style={styles.addButton} onPress={addConversationStarter}>
-            <ThemedText style={styles.addButtonText}>+</ThemedText>
+          <Pressable style={[styles.addButton, { backgroundColor: colors.accent }]} onPress={addConversationStarter}>
+            <ThemedText style={[styles.addButtonText, { color: colors.card }]}>+</ThemedText>
           </Pressable>
         </View>
         <View style={styles.startersList}>
           {conversationStarters.map((starter, idx) => (
-            <View key={idx} style={styles.starterChip}>
-              <ThemedText style={styles.starterText}>{starter}</ThemedText>
+            <View key={idx} style={[styles.starterChip, { backgroundColor: colors.border }]}>
+              <ThemedText style={[styles.starterText, { color: colors.text }]}>{starter}</ThemedText>
               <Pressable onPress={() => removeConversationStarter(starter)} style={styles.removeButton}>
-                <ThemedText style={styles.removeButtonText}>×</ThemedText>
+                <ThemedText style={[styles.removeButtonText, { color: colors.text }]}>×</ThemedText>
               </Pressable>
             </View>
           ))}
         </View>
         <View style={styles.examplesRow}>
           {CONVERSATION_STARTER_EXAMPLES.slice(0, 3).map((example, idx) => (
-            <Pressable key={idx} style={styles.exampleChip} onPress={() => setNewStarter(example)}>
-              <ThemedText style={styles.exampleText}>{example}</ThemedText>
+            <Pressable key={idx} style={[styles.exampleChip, { backgroundColor: colors.border }]} onPress={() => setNewStarter(example)}>
+              <ThemedText style={[styles.exampleText, { color: colors.textMuted }]}>{example}</ThemedText>
             </Pressable>
           ))}
         </View>
@@ -337,14 +342,14 @@ export default function EditProfileScreen() {
 
       {/* Интересы */}
       <View style={styles.field}>
-        <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>Интересы</ThemedText>
+        <ThemedText type="defaultSemiBold" style={[styles.fieldLabel, { color: colors.text }]}>Интересы</ThemedText>
         <View style={styles.chipsRow}>
           {INTEREST_OPTIONS.map((interest) => (
             <Pressable
               key={interest}
-              style={[styles.chip, interests.includes(interest) && styles.chipActive]}
+              style={[styles.chip, { borderColor: colors.border }, interests.includes(interest) && [styles.chipActive, { backgroundColor: colors.accent, borderColor: colors.accent }]]}
               onPress={() => toggleInterest(interest)}>
-              <ThemedText type="defaultSemiBold" style={interests.includes(interest) ? styles.chipTextActive : null}>
+              <ThemedText type="defaultSemiBold" style={interests.includes(interest) ? [styles.chipTextActive, { color: colors.card }] : { color: colors.text }}>
                 {interest}
               </ThemedText>
             </Pressable>
@@ -354,14 +359,14 @@ export default function EditProfileScreen() {
 
       {/* Языки */}
       <View style={styles.field}>
-        <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>Языки</ThemedText>
+        <ThemedText type="defaultSemiBold" style={[styles.fieldLabel, { color: colors.text }]}>Языки</ThemedText>
         <View style={styles.chipsRow}>
           {LANGUAGE_OPTIONS.map((lang) => (
             <Pressable
               key={lang.code}
-              style={[styles.chip, languages.includes(lang.code) && styles.chipActive]}
+              style={[styles.chip, { borderColor: colors.border }, languages.includes(lang.code) && [styles.chipActive, { backgroundColor: colors.accent, borderColor: colors.accent }]]}
               onPress={() => toggleLanguage(lang.code)}>
-              <ThemedText type="defaultSemiBold" style={languages.includes(lang.code) ? styles.chipTextActive : null}>
+              <ThemedText type="defaultSemiBold" style={languages.includes(lang.code) ? [styles.chipTextActive, { color: colors.card }] : { color: colors.text }}>
                 {lang.label}
               </ThemedText>
             </Pressable>
@@ -371,24 +376,24 @@ export default function EditProfileScreen() {
 
       {/* Favorite Spots */}
       <View style={styles.field}>
-        <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>Любимые места</ThemedText>
+        <ThemedText type="defaultSemiBold" style={[styles.fieldLabel, { color: colors.text }]}>Любимые места</ThemedText>
         <View style={styles.spotsList}>
           {favoriteSpots.map((spot) => (
-            <View key={spot.id} style={styles.spotItem}>
+            <View key={spot.id} style={[styles.spotItem, { backgroundColor: colors.border }]}>
               <View style={styles.spotInfo}>
-                <ThemedText type="defaultSemiBold">{spot.name}</ThemedText>
-                <ThemedText style={styles.spotAddress}>{spot.address}</ThemedText>
+                <ThemedText type="defaultSemiBold" style={{ color: colors.text }}>{spot.name}</ThemedText>
+                <ThemedText style={[styles.spotAddress, { color: colors.textMuted }]}>{spot.address}</ThemedText>
               </View>
               <Pressable onPress={() => removeFavoriteSpot(spot.id)} style={styles.removeSpotButton}>
-                <ThemedText style={styles.removeButtonText}>×</ThemedText>
+                <ThemedText style={[styles.removeButtonText, { color: colors.text }]}>×</ThemedText>
               </Pressable>
             </View>
           ))}
         </View>
         <View style={styles.popularSpotsRow}>
           {POPULAR_SPOTS.filter((spot) => !favoriteSpots.some((fs) => fs.name === spot.name)).map((spot, idx) => (
-            <Pressable key={idx} style={styles.addSpotButton} onPress={() => addFavoriteSpot(spot)}>
-              <ThemedText style={styles.addSpotText}>+ {spot.name}</ThemedText>
+            <Pressable key={idx} style={[styles.addSpotButton, { backgroundColor: colors.border }]} onPress={() => addFavoriteSpot(spot)}>
+              <ThemedText style={[styles.addSpotText, { color: colors.text }]}>+ {spot.name}</ThemedText>
             </Pressable>
           ))}
         </View>
@@ -396,42 +401,42 @@ export default function EditProfileScreen() {
 
       {/* Privacy Settings */}
       <View style={styles.field}>
-        <ThemedText type="defaultSemiBold" style={styles.fieldLabel}>Настройки приватности</ThemedText>
+        <ThemedText type="defaultSemiBold" style={[styles.fieldLabel, { color: colors.text }]}>Настройки приватности</ThemedText>
         <View style={styles.privacyRow}>
           <View style={styles.privacyItem}>
             <View style={styles.privacyLabel}>
-              <ThemedText type="defaultSemiBold">👻 Режим невидимки</ThemedText>
-              <ThemedText style={styles.privacyHint}>Скрыть меня на карте</ThemedText>
+              <ThemedText type="defaultSemiBold" style={{ color: colors.text }}>👻 Режим невидимки</ThemedText>
+              <ThemedText style={[styles.privacyHint, { color: colors.textMuted }]}>Скрыть меня на карте</ThemedText>
             </View>
             <Switch
               value={privacy.ghostMode}
               onValueChange={(v) => setPrivacy({ ...privacy, ghostMode: v })}
-              trackColor={{ false: '#E0E0E0', true: '#FF9F66' }}
-              thumbColor={privacy.ghostMode ? '#FFFFFF' : '#F4F3F4'}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={privacy.ghostMode ? colors.card : colors.textMuted}
             />
           </View>
           <View style={styles.privacyItem}>
             <View style={styles.privacyLabel}>
-              <ThemedText type="defaultSemiBold">📍 Точное местоположение</ThemedText>
-              <ThemedText style={styles.privacyHint}>Показывать только приблизительное расстояние</ThemedText>
+              <ThemedText type="defaultSemiBold" style={{ color: colors.text }}>📍 Точное местоположение</ThemedText>
+              <ThemedText style={[styles.privacyHint, { color: colors.textMuted }]}>Показывать только приблизительное расстояние</ThemedText>
             </View>
             <Switch
               value={!privacy.showExactLocation}
               onValueChange={(v) => setPrivacy({ ...privacy, showExactLocation: !v })}
-              trackColor={{ false: '#E0E0E0', true: '#FF9F66' }}
-              thumbColor={!privacy.showExactLocation ? '#FFFFFF' : '#F4F3F4'}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={!privacy.showExactLocation ? colors.card : colors.textMuted}
             />
           </View>
           <View style={styles.privacyItem}>
             <View style={styles.privacyLabel}>
-              <ThemedText type="defaultSemiBold">✅ Чек-ины</ThemedText>
-              <ThemedText style={styles.privacyHint}>Разрешить чек-ины в местах</ThemedText>
+              <ThemedText type="defaultSemiBold" style={{ color: colors.text }}>✅ Чек-ины</ThemedText>
+              <ThemedText style={[styles.privacyHint, { color: colors.textMuted }]}>Разрешить чек-ины в местах</ThemedText>
             </View>
             <Switch
               value={privacy.allowCheckIns}
               onValueChange={(v) => setPrivacy({ ...privacy, allowCheckIns: v })}
-              trackColor={{ false: '#E0E0E0', true: '#FF9F66' }}
-              thumbColor={privacy.allowCheckIns ? '#FFFFFF' : '#F4F3F4'}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={privacy.allowCheckIns ? colors.card : colors.textMuted}
             />
           </View>
         </View>
@@ -443,10 +448,10 @@ export default function EditProfileScreen() {
         {/* Floating Save Button */}
         <View style={[styles.saveButtonWrap, { paddingBottom: 20 + insets.bottom }]}>
           <Pressable
-            style={[styles.saveButton, (!name.trim() || saving) && styles.saveButtonDisabled]}
+            style={[styles.saveButton, { backgroundColor: colors.accent }, (!name.trim() || saving) && styles.saveButtonDisabled]}
             disabled={!name.trim() || saving}
             onPress={onSave}>
-            <ThemedText type="defaultSemiBold" style={styles.saveButtonText}>
+            <ThemedText type="defaultSemiBold" style={[styles.saveButtonText, { color: colors.card }]}>
               {saving ? 'Сохранение...' : 'Save Changes'}
             </ThemedText>
           </Pressable>

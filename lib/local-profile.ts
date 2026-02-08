@@ -32,6 +32,21 @@ export type LocalProfile = {
   location: string | null; // 'Bishkek, Kyrgyzstan'
   created_at: string;
   updated_at: string;
+  // Map / ghost mode (Supabase: is_ghost, latitude, longitude, last_seen)
+  is_ghost: boolean;
+  latitude: number | null;
+  longitude: number | null;
+  last_seen: string | null;
+};
+
+/** Minimal profile for map markers (nearby users) */
+export type NearbyUser = {
+  id: string;
+  name: string | null;
+  avatar_url: string | null;
+  latitude: number;
+  longitude: number;
+  last_seen: string;
 };
 
 // Default profile for new users or fallback
@@ -55,6 +70,10 @@ const DEFAULT_PROFILE: LocalProfile = {
   location: 'Бишкек, Кыргызстан',
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
+  is_ghost: false,
+  latitude: null,
+  longitude: null,
+  last_seen: null,
 };
 
 /**
@@ -108,6 +127,10 @@ export async function getProfile(): Promise<LocalProfile> {
       location: data.location || 'Бишкек, Кыргызстан',
       created_at: data.created_at || new Date().toISOString(),
       updated_at: data.updated_at || new Date().toISOString(),
+      is_ghost: data.is_ghost === true,
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+      last_seen: data.last_seen ?? null,
     };
 
     return profile;
@@ -115,6 +138,34 @@ export async function getProfile(): Promise<LocalProfile> {
     console.error('[Profile] Unexpected error:', e);
     return DEFAULT_PROFILE;
   }
+}
+
+/**
+ * Create or replace profile row (for mandatory setup after sign-up).
+ * Use when profile row may not exist or is incomplete.
+ */
+export async function upsertProfile(params: {
+  name: string;
+  avatar_url: string | null;
+  vibe?: string | null;
+  bio?: string | null;
+}): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { error } = await supabase.from('profiles').upsert(
+    {
+      id: user.id,
+      name: params.name.trim(),
+      avatar_url: params.avatar_url || null,
+      vibe: params.vibe?.trim() || null,
+      bio: params.bio?.trim() || null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'id' }
+  );
+
+  if (error) throw error;
 }
 
 /**
@@ -152,8 +203,12 @@ export async function updateProfile(
     if (updates.favoriteSpots !== undefined) {
       supabaseUpdates.favorite_spots = updates.favoriteSpots;
     }
-    if (updates.privacy !== undefined) supabaseUpdates.privacy = updates.privacy;
+    // if (updates.privacy !== undefined) supabaseUpdates.privacy = updates.privacy;
     if (updates.location !== undefined) supabaseUpdates.location = updates.location;
+    if (updates.is_ghost !== undefined) supabaseUpdates.is_ghost = updates.is_ghost;
+    if (updates.latitude !== undefined) supabaseUpdates.latitude = updates.latitude;
+    if (updates.longitude !== undefined) supabaseUpdates.longitude = updates.longitude;
+    if (updates.last_seen !== undefined) supabaseUpdates.last_seen = updates.last_seen;
 
     // Update in Supabase
     const { error } = await supabase
@@ -180,4 +235,55 @@ export async function updateProfile(
 export async function getCurrentUserId(): Promise<string | null> {
   const { data: { user } } = await supabase.auth.getUser();
   return user?.id || null;
+}
+
+/**
+ * Fetch nearby users for the map (non-ghost, with location, active in last 24h).
+ * Excludes the current user.
+ */
+export async function getNearbyUsers(myUserId: string | null): Promise<NearbyUser[]> {
+  if (!myUserId) return [];
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name, avatar_url, latitude, longitude, last_seen')
+    .neq('id', myUserId)
+    .eq('is_ghost', false)
+    .not('latitude', 'is', null)
+    .not('longitude', 'is', null)
+    .gte('last_seen', since);
+
+  if (error) {
+    console.warn('[Profile] getNearbyUsers error:', error.message);
+    return [];
+  }
+  return (data || [])
+    .filter((row) => row.latitude != null && row.longitude != null && row.last_seen != null)
+    .map((row) => ({
+      id: row.id,
+      name: row.name ?? null,
+      avatar_url: row.avatar_url ?? null,
+      latitude: Number(row.latitude),
+      longitude: Number(row.longitude),
+      last_seen: String(row.last_seen),
+    }));
+}
+
+/**
+ * Check if the current user has a complete profile (row exists with name and avatar).
+ * Used to redirect to create-profile when profile is missing or incomplete after sign-up.
+ */
+export async function hasCompleteProfile(): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name, avatar_url')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (error || !data) return false;
+  const hasName = data.name != null && String(data.name).trim() !== '';
+  return hasName;
 }

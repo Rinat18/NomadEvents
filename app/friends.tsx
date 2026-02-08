@@ -135,18 +135,18 @@ export default function FriendsScreen() {
         </View>
 
         {/* Segmented control */}
-        <View style={styles.segmented}>
+        <View style={[styles.segmented, { backgroundColor: colors.border }]}>
           <Pressable
-            style={[styles.segment, tab === TAB_MY_FRIENDS && styles.segmentActive]}
+            style={[styles.segment, tab === TAB_MY_FRIENDS && { backgroundColor: colors.card }, tab === TAB_MY_FRIENDS && styles.segmentActive]}
             onPress={() => setTab(TAB_MY_FRIENDS)}>
-            <Text style={[styles.segmentText, tab === TAB_MY_FRIENDS && styles.segmentTextActive]}>
+            <Text style={[styles.segmentText, { color: colors.textMuted }, tab === TAB_MY_FRIENDS && { color: colors.text }]}>
               My Friends
             </Text>
           </Pressable>
           <Pressable
-            style={[styles.segment, tab === TAB_FIND_PEOPLE && styles.segmentActive]}
+            style={[styles.segment, tab === TAB_FIND_PEOPLE && { backgroundColor: colors.card }, tab === TAB_FIND_PEOPLE && styles.segmentActive]}
             onPress={() => setTab(TAB_FIND_PEOPLE)}>
-            <Text style={[styles.segmentText, tab === TAB_FIND_PEOPLE && styles.segmentTextActive]}>
+            <Text style={[styles.segmentText, { color: colors.textMuted }, tab === TAB_FIND_PEOPLE && { color: colors.text }]}>
               Find People
             </Text>
           </Pressable>
@@ -158,8 +158,8 @@ export default function FriendsScreen() {
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholder="Search by name…"
-              placeholderTextColor="#6E6E73"
-              style={styles.searchInput}
+              placeholderTextColor={colors.textMuted}
+              style={[styles.searchInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
               autoCapitalize="none"
               autoCorrect={false}
             />
@@ -180,45 +180,45 @@ export default function FriendsScreen() {
             {/* Section 1: Requests */}
             {requests.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Requests</Text>
+                <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Requests</Text>
                 {requests.map((req) => (
-                  <View key={req.id} style={styles.card}>
+                  <View key={req.id} style={[styles.card, { backgroundColor: colors.card }]}>
                     <View style={styles.cardLeft}>
                       {req.requester?.avatar_url ? (
                         <Image source={{ uri: req.requester.avatar_url }} style={styles.avatar} />
                       ) : (
-                        <View style={styles.avatarPlaceholder}>
-                          <Text style={styles.avatarPlaceholderText}>
+                        <View style={[styles.avatarPlaceholder, { backgroundColor: colors.border }]}>
+                          <Text style={[styles.avatarPlaceholderText, { color: colors.accent }]}>
                             {req.requester?.name?.charAt(0).toUpperCase() ?? '?'}
                           </Text>
                         </View>
                       )}
                       <View style={styles.cardInfo}>
-                        <Text style={styles.cardName}>{req.requester?.name ?? 'Someone'}</Text>
-                        <Text style={styles.cardMeta}>Wants to be friends</Text>
+                        <Text style={[styles.cardName, { color: colors.text }]}>{req.requester?.name ?? 'Someone'}</Text>
+                        <Text style={[styles.cardMeta, { color: colors.textMuted }]}>Wants to be friends</Text>
                       </View>
                     </View>
                     <View style={styles.cardActions}>
                       <TouchableOpacity
-                        style={[styles.btnAccept, acceptingId === req.id && styles.btnDisabled]}
+                        style={[styles.btnAccept, { backgroundColor: colors.accent }, acceptingId === req.id && styles.btnDisabled]}
                         onPress={() => handleAccept(req.id)}
                         disabled={acceptingId !== null}
                         activeOpacity={0.8}>
                         {acceptingId === req.id ? (
-                          <ActivityIndicator size="small" color="#FFF" />
+                          <ActivityIndicator size="small" color={colors.card} />
                         ) : (
                           <Text style={styles.btnAcceptText}>Accept</Text>
                         )}
                       </TouchableOpacity>
                       <TouchableOpacity
-                        style={[styles.btnDecline, decliningId === req.id && styles.btnDisabled]}
+                        style={[styles.btnDecline, { backgroundColor: colors.border }, decliningId === req.id && styles.btnDisabled]}
                         onPress={() => handleDecline(req.id)}
                         disabled={decliningId !== null}
                         activeOpacity={0.8}>
                         {decliningId === req.id ? (
-                          <ActivityIndicator size="small" color="#6E6E73" />
+                          <ActivityIndicator size="small" color={colors.textMuted} />
                         ) : (
-                          <Text style={styles.btnDeclineText}>Decline</Text>
+                          <Text style={[styles.btnDeclineText, { color: colors.text }]}>Decline</Text>
                         )}
                       </TouchableOpacity>
                     </View>
@@ -229,33 +229,33 @@ export default function FriendsScreen() {
 
             {/* Section 2: All Friends */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>All Friends</Text>
+              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>All Friends</Text>
               {friends.length === 0 ? (
-                <View style={styles.emptyCard}>
-                  <Text style={styles.emptyText}>No friends yet. Find people and send requests!</Text>
+                <View style={[styles.emptyCard, { backgroundColor: colors.card }]}>
+                  <Text style={[styles.emptyText, { color: colors.text }]}>No friends yet. Find people and send requests!</Text>
                 </View>
               ) : (
                 friends.map((f) => (
                   <TouchableOpacity
                     key={f.friendshipId}
-                    style={styles.card}
+                    style={[styles.card, { backgroundColor: colors.card }]}
                     activeOpacity={0.8}
                     onPress={() => router.push({ pathname: '/user/[id]', params: { id: f.user.id } })}>
                     <View style={styles.cardLeft}>
                       {f.user.avatar_url ? (
                         <Image source={{ uri: f.user.avatar_url }} style={styles.avatar} />
                       ) : (
-                        <View style={styles.avatarPlaceholder}>
-                          <Text style={styles.avatarPlaceholderText}>
+                        <View style={[styles.avatarPlaceholder, { backgroundColor: colors.border }]}>
+                          <Text style={[styles.avatarPlaceholderText, { color: colors.accent }]}>
                             {f.user.name?.charAt(0).toUpperCase() ?? '?'}
                           </Text>
                         </View>
                       )}
-                      <Text style={styles.cardName} numberOfLines={1}>
+                      <Text style={[styles.cardName, { color: colors.text }]} numberOfLines={1}>
                         {f.user.name ?? 'Unknown'}
                       </Text>
                     </View>
-                    <Text style={styles.friendBadge}>Friends ✅</Text>
+                    <Text style={[styles.friendBadge, { color: colors.accent }]}>Friends ✅</Text>
                   </TouchableOpacity>
                 ))
               )}
@@ -273,11 +273,11 @@ export default function FriendsScreen() {
               </View>
             ) : searchQuery.trim() === '' ? (
               <View style={styles.centered}>
-                <Text style={styles.hint}>Type a name to search</Text>
+                <Text style={[styles.hint, { color: colors.textMuted }]}>Type a name to search</Text>
               </View>
             ) : searchResults.length === 0 ? (
               <View style={styles.centered}>
-                <Text style={styles.hint}>No users found</Text>
+                <Text style={[styles.hint, { color: colors.textMuted }]}>No users found</Text>
               </View>
             ) : (
               <FlatList
@@ -290,7 +290,7 @@ export default function FriendsScreen() {
                   const isAccepted = status === 'accepted';
                   const isSending = sendingId === item.id;
                   return (
-                    <View style={styles.card}>
+                    <View style={[styles.card, { backgroundColor: colors.card }]}>
                       <TouchableOpacity
                         style={styles.cardLeft}
                         activeOpacity={0.8}
@@ -298,27 +298,27 @@ export default function FriendsScreen() {
                         {item.avatar_url ? (
                           <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
                         ) : (
-                          <View style={styles.avatarPlaceholder}>
-                            <Text style={styles.avatarPlaceholderText}>
+                          <View style={[styles.avatarPlaceholder, { backgroundColor: colors.border }]}>
+                            <Text style={[styles.avatarPlaceholderText, { color: colors.accent }]}>
                               {item.name?.charAt(0).toUpperCase() ?? '?'}
                             </Text>
                           </View>
                         )}
-                        <Text style={styles.cardName}>{item.name ?? 'Unknown'}</Text>
+                        <Text style={[styles.cardName, { color: colors.text }]}>{item.name ?? 'Unknown'}</Text>
                       </TouchableOpacity>
                       <View style={styles.cardAction}>
                         {isAccepted ? (
-                          <Text style={styles.statusFriends}>Friends ✅</Text>
+                          <Text style={[styles.statusFriends, { color: colors.accent }]}>Friends ✅</Text>
                         ) : isPending ? (
-                          <Text style={styles.statusSent}>Sent ⏳</Text>
+                          <Text style={[styles.statusSent, { color: colors.textMuted }]}>Sent ⏳</Text>
                         ) : (
                           <TouchableOpacity
-                            style={[styles.btnAdd, isSending && styles.btnDisabled]}
+                            style={[styles.btnAdd, { backgroundColor: colors.accent }, isSending && styles.btnDisabled]}
                             onPress={() => handleAdd(item.id)}
                             disabled={isSending}
                             activeOpacity={0.8}>
                             {isSending ? (
-                              <ActivityIndicator size="small" color="#FFF" />
+                              <ActivityIndicator size="small" color={colors.card} />
                             ) : (
                               <Text style={styles.btnAddText}>Add +</Text>
                             )}

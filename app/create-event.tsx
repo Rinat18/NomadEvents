@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { getEmojiFromPlace, reverseGeocode } from '@/lib/geocoding';
 import { createEvent } from '@/lib/local-events';
 import { getOrCreateLocalUserId } from '@/lib/local-user';
+import { useTheme } from '@/lib/theme';
 
 const EMOJI_OPTIONS = [
   '📍', // Default
@@ -30,6 +31,7 @@ const EMOJI_OPTIONS = [
 
 export default function CreateEventScreen() {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const { lat, lng } = useLocalSearchParams<{ lat?: string; lng?: string }>();
   const [title, setTitle] = React.useState('');
   const [description, setDescription] = React.useState('');
@@ -106,8 +108,10 @@ export default function CreateEventScreen() {
     router.push({ pathname: '/event/[id]', params: { id: ev.id } });
   }
 
+  const inputStyle = [styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }];
+
   return (
-    <ThemedView style={[styles.container, { paddingTop: 16 + insets.top }]}>
+    <ThemedView style={[styles.container, { backgroundColor: colors.background, paddingTop: 16 + insets.top }]}>
       <ThemedText type="title">Создать ивент</ThemedText>
 
       <ThemedView style={styles.field}>
@@ -116,7 +120,8 @@ export default function CreateEventScreen() {
           value={title}
           onChangeText={setTitle}
           placeholder="Например: Прогулка в парке"
-          style={styles.input}
+          placeholderTextColor={colors.textMuted}
+          style={inputStyle}
           autoCorrect={false}
         />
       </ThemedView>
@@ -127,7 +132,8 @@ export default function CreateEventScreen() {
           value={description}
           onChangeText={setDescription}
           placeholder="Коротко: где/когда/что берем с собой"
-          style={[styles.input, styles.textarea]}
+          placeholderTextColor={colors.textMuted}
+          style={[inputStyle, styles.textarea]}
           multiline
         />
       </ThemedView>
@@ -136,24 +142,23 @@ export default function CreateEventScreen() {
       <ThemedView style={styles.field}>
         <ThemedText type="defaultSemiBold">Meeting Point</ThemedText>
         <View style={styles.meetingPointRow}>
-          {/* Emoji Picker Button */}
-          <Pressable style={styles.emojiButton} onPress={() => setShowEmojiPicker(true)}>
+          <Pressable style={[styles.emojiButton, { backgroundColor: colors.border, borderColor: colors.accent }]} onPress={() => setShowEmojiPicker(true)}>
             <ThemedText style={styles.emojiButtonText}>{emoji}</ThemedText>
           </Pressable>
-          {/* Place Name Input */}
           <TextInput
             value={meetingPlace}
             onChangeText={setMeetingPlace}
             placeholder={loadingPlace ? 'Загрузка места...' : 'Название места (например: Sierra Coffee)'}
-            style={[styles.input, styles.placeInput]}
+            placeholderTextColor={colors.textMuted}
+            style={[inputStyle, styles.placeInput]}
             autoCorrect={false}
           />
         </View>
         {loadingPlace && (
-          <ThemedText style={styles.loadingText}>Определяем место...</ThemedText>
+          <ThemedText style={[styles.loadingText, { color: colors.textMuted }]}>Определяем место...</ThemedText>
         )}
         {placeName && !loadingPlace && (
-          <ThemedText style={styles.placeHint}>Найдено: {placeName}</ThemedText>
+          <ThemedText style={[styles.placeHint, { color: colors.textMuted }]}>Найдено: {placeName}</ThemedText>
         )}
       </ThemedView>
 
@@ -164,15 +169,17 @@ export default function CreateEventScreen() {
             value={meetingLat}
             onChangeText={setMeetingLat}
             placeholder="lat"
+            placeholderTextColor={colors.textMuted}
             keyboardType="decimal-pad"
-            style={[styles.input, styles.coordInput]}
+            style={[inputStyle, styles.coordInput]}
           />
           <TextInput
             value={meetingLng}
             onChangeText={setMeetingLng}
             placeholder="lng"
+            placeholderTextColor={colors.textMuted}
             keyboardType="decimal-pad"
-            style={[styles.input, styles.coordInput]}
+            style={[inputStyle, styles.coordInput]}
           />
         </ThemedView>
         {!coordsValid ? (
@@ -185,25 +192,25 @@ export default function CreateEventScreen() {
         <View style={styles.switchRow}>
           <View style={styles.switchLabel}>
             <ThemedText type="defaultSemiBold">Face Control (одобрение гостей)</ThemedText>
-            <ThemedText style={styles.switchHint}>Проверять гостей перед тем, как они смогут присоединиться.</ThemedText>
+            <ThemedText style={[styles.switchHint, { color: colors.textMuted }]}>Проверять гостей перед тем, как они смогут присоединиться.</ThemedText>
           </View>
           <Switch
             value={requireApproval}
             onValueChange={setRequireApproval}
-            trackColor={{ false: '#E0E0E0', true: '#FF9F66' }}
-            thumbColor={requireApproval ? '#FFFFFF' : '#F4F3F4'}
+            trackColor={{ false: colors.border, true: colors.accent }}
+            thumbColor={requireApproval ? colors.card : colors.textMuted}
           />
         </View>
       </ThemedView>
 
       <Pressable
-        style={[styles.button, !canSave ? styles.buttonDisabled : null]}
+        style={[styles.button, { backgroundColor: colors.accent }, !canSave ? styles.buttonDisabled : null]}
         disabled={!canSave}
         onPress={onCreate}>
-        <ThemedText type="defaultSemiBold">{saving ? 'Создаю…' : 'Создать'}</ThemedText>
+        <ThemedText type="defaultSemiBold" style={{ color: colors.card }}>{saving ? 'Создаю…' : 'Создать'}</ThemedText>
       </Pressable>
 
-      <ThemedText style={styles.hint}>
+      <ThemedText style={[styles.hint, { color: colors.textMuted }]}>
         Сейчас ивенты сохраняются локально (для 1 пользователя). Позже подключим "общие" ивенты по
         серверу и добавим выбор точки на карте.
       </ThemedText>
@@ -215,15 +222,19 @@ export default function CreateEventScreen() {
         animationType="fade"
         onRequestClose={() => setShowEmojiPicker(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowEmojiPicker(false)}>
-          <View style={styles.modalContent}>
-            <ThemedText type="defaultSemiBold" style={styles.modalTitle}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <ThemedText type="defaultSemiBold" style={[styles.modalTitle, { color: colors.text }]}>
               Выбери эмодзи
             </ThemedText>
             <ScrollView contentContainerStyle={styles.emojiGrid}>
               {EMOJI_OPTIONS.map((emojiOption) => (
                 <Pressable
                   key={emojiOption}
-                  style={[styles.emojiOption, emoji === emojiOption && styles.emojiOptionSelected]}
+                  style={[
+                    styles.emojiOption,
+                    { backgroundColor: colors.background },
+                    emoji === emojiOption && { borderColor: colors.accent, backgroundColor: colors.border },
+                  ]}
                   onPress={() => {
                     setEmoji(emojiOption);
                     setShowEmojiPicker(false);

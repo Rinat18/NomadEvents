@@ -8,6 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { getDMMessages, getOrCreateDMChat, sendDMMessage, type DMMessage } from '@/lib/local-dms';
 import { getProfile } from '@/lib/local-profile';
 import { getOrCreateLocalUserId } from '@/lib/local-user';
+import { useTheme } from '@/lib/theme';
 
 type ChatRow =
   | { type: 'sep'; id: string; label: string }
@@ -15,6 +16,7 @@ type ChatRow =
 
 export default function DMChatScreen() {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const params = useLocalSearchParams<{ id: string; name: string; avatar: string; vibe: string }>();
 
   const chatId = params.id || '';
@@ -151,7 +153,7 @@ export default function DMChatScreen() {
               onPress={() => router.back()}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               style={styles.headerBack}>
-              <Ionicons name="chevron-back" size={28} color="#2D1B3D" />
+              <Ionicons name="chevron-back" size={28} color={colors.text} />
             </TouchableOpacity>
           ),
           headerTitle: () => (
@@ -159,39 +161,39 @@ export default function DMChatScreen() {
               {userAvatar ? (
                 <Image source={{ uri: userAvatar }} style={styles.headerAvatar} />
               ) : (
-                <View style={styles.headerAvatarPlaceholder}>
-                  <Text style={styles.headerAvatarText}>{userName.charAt(0).toUpperCase()}</Text>
+                <View style={[styles.headerAvatarPlaceholder, { backgroundColor: colors.border }]}>
+                  <Text style={[styles.headerAvatarText, { color: colors.accent }]}>{userName.charAt(0).toUpperCase()}</Text>
                 </View>
               )}
               <View>
-                <Text style={styles.headerName}>{userName}</Text>
-                <Text style={styles.headerStatus}>Online</Text>
+                <Text style={[styles.headerName, { color: colors.text }]}>{userName}</Text>
+                <Text style={[styles.headerStatus, { color: colors.textMuted }]}>Online</Text>
               </View>
             </Pressable>
           ),
-          headerStyle: { backgroundColor: '#FFF5F0' },
-          headerTintColor: '#2D1B3D',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
           headerShadowVisible: false,
         }}
       />
-      <SafeAreaView style={styles.safe} edges={[]}>
+      <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={[]}>
         <KeyboardAvoidingView
-          style={styles.container}
+          style={[styles.container, { backgroundColor: colors.background }]}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
           {messages.length === 0 ? (
             <View style={styles.emptyState}>
-              <View style={styles.emptyAvatar}>
+              <View style={[styles.emptyAvatar, { backgroundColor: colors.border }]}>
                 {userAvatar ? (
                   <Image source={{ uri: userAvatar }} style={styles.emptyAvatarImage} />
                 ) : (
-                  <Text style={styles.emptyAvatarText}>{userName.charAt(0).toUpperCase()}</Text>
+                  <Text style={[styles.emptyAvatarText, { color: colors.accent }]}>{userName.charAt(0).toUpperCase()}</Text>
                 )}
               </View>
-              <ThemedText type="defaultSemiBold" style={styles.emptyName}>
+              <ThemedText type="defaultSemiBold" style={[styles.emptyName, { color: colors.text }]}>
                 {userName}
               </ThemedText>
-              <ThemedText style={styles.emptyHint}>Start a conversation!</ThemedText>
+              <ThemedText style={[styles.emptyHint, { color: colors.textMuted }]}>Start a conversation!</ThemedText>
             </View>
           ) : (
             <FlatList
@@ -210,8 +212,8 @@ export default function DMChatScreen() {
                 if (item.type === 'sep') {
                   return (
                     <View style={styles.sepWrap}>
-                      <View style={styles.sepPill}>
-                        <ThemedText style={styles.sepText}>{item.label}</ThemedText>
+                      <View style={[styles.sepPill, { backgroundColor: colors.border }]}>
+                        <ThemedText style={[styles.sepText, { color: colors.textMuted }]}>{item.label}</ThemedText>
                       </View>
                     </View>
                   );
@@ -228,8 +230,8 @@ export default function DMChatScreen() {
                           {msg.author.avatar_url ? (
                             <Image source={{ uri: msg.author.avatar_url }} style={styles.avatar} />
                           ) : (
-                            <View style={styles.avatarPlaceholder}>
-                              <Text style={styles.avatarPlaceholderText}>
+                            <View style={[styles.avatarPlaceholder, { backgroundColor: colors.border }]}>
+                              <Text style={[styles.avatarPlaceholderText, { color: colors.accent }]}>
                                 {msg.author.name.charAt(0).toUpperCase()}
                               </Text>
                             </View>
@@ -238,16 +240,16 @@ export default function DMChatScreen() {
                       </Pressable>
                     ) : null}
                     <View style={styles.msgContent}>
-                      <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}>
-                        <ThemedText style={[styles.bubbleText, mine ? styles.bubbleTextMine : styles.bubbleTextOther]}>
+                      <View style={[styles.bubble, mine ? { ...styles.bubbleMine, backgroundColor: colors.accent } : { ...styles.bubbleOther, backgroundColor: colors.card }]}>
+                        <ThemedText style={[styles.bubbleText, mine ? styles.bubbleTextMine : styles.bubbleTextOther, mine ? { color: colors.card } : { color: colors.text }]}>
                           {msg.body}
                         </ThemedText>
                         <View style={styles.bubbleMeta}>
-                          <Text style={[styles.bubbleTime, mine ? styles.bubbleTimeMine : styles.bubbleTimeOther]}>
+                          <Text style={[styles.bubbleTime, mine ? [styles.bubbleTimeMine, { color: 'rgba(255,255,255,0.8)' }] : [styles.bubbleTimeOther, { color: colors.textMuted }]]}>
                             {new Date(msg.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                           </Text>
                           {mine && (
-                            <Ionicons name="checkmark-done" size={14} color="#FFFFFF" style={styles.readIndicator} />
+                            <Ionicons name="checkmark-done" size={14} color={colors.card} style={styles.readIndicator} />
                           )}
                         </View>
                       </View>
@@ -258,21 +260,21 @@ export default function DMChatScreen() {
             />
           )}
 
-          <View style={styles.inputContainer}>
-            <View style={styles.composer}>
+          <View style={[styles.inputContainer, { backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.border }]}>
+            <View style={[styles.composer, { backgroundColor: colors.card }]}>
               <TextInput
                 value={text}
                 onChangeText={setText}
                 placeholder="Message…"
-                placeholderTextColor="rgba(139, 122, 155, 0.8)"
-                style={styles.input}
+                placeholderTextColor={colors.textMuted}
+                style={[styles.input, { color: colors.text }]}
                 multiline
               />
               <Pressable
-                style={[styles.send, sending ? styles.sendDisabled : null]}
+                style={[styles.send, { backgroundColor: colors.accent }, sending ? styles.sendDisabled : null]}
                 onPress={onSend}
                 disabled={sending || text.trim().length === 0}>
-                <ThemedText style={styles.sendIcon}>➤</ThemedText>
+                <ThemedText style={[styles.sendIcon, { color: colors.card }]}>➤</ThemedText>
               </Pressable>
             </View>
             <View style={{ height: insets.bottom }} />

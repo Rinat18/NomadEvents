@@ -7,6 +7,7 @@ import { VibeBadge } from '@/components/vibe-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import type { VibeIntent } from '@/lib/local-profile';
+import { useTheme } from '@/lib/theme';
 
 // Mock interests based on vibe
 function getMockInterests(vibe: string | null): string[] {
@@ -76,6 +77,7 @@ function getMockBio(vibe: string | null): string {
 
 export default function PublicProfileScreen() {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const params = useLocalSearchParams<{
     id: string;
     name: string;
@@ -100,23 +102,23 @@ export default function PublicProfileScreen() {
       <Stack.Screen
         options={{
           title: name,
-          headerStyle: { backgroundColor: '#FFF5F0' },
-          headerTintColor: '#2D1B3D',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
           headerShadowVisible: false,
         }}
       />
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={[styles.content, { paddingBottom: 40 + insets.bottom }]}
         showsVerticalScrollIndicator={false}>
         {/* Card 1: Photo & Basic Info */}
-        <ThemedView style={styles.card}>
+        <ThemedView style={[styles.card, { backgroundColor: colors.card }]}>
           <View style={styles.photoContainer}>
             {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.mainPhoto} />
+              <Image source={{ uri: avatarUrl }} style={[styles.mainPhoto, { borderColor: colors.accent }]} />
             ) : (
-              <View style={styles.photoPlaceholder}>
-                <ThemedText type="title" style={styles.photoPlaceholderText}>
+              <View style={[styles.photoPlaceholder, { backgroundColor: colors.border, borderColor: colors.accent }]}>
+                <ThemedText type="title" style={[styles.photoPlaceholderText, { color: colors.accent }]}>
                   {name.charAt(0).toUpperCase()}
                 </ThemedText>
               </View>
@@ -124,17 +126,17 @@ export default function PublicProfileScreen() {
           </View>
 
           <View style={styles.nameSection}>
-            <ThemedText type="title" style={styles.name}>
+            <ThemedText type="title" style={[styles.name, { color: colors.text }]}>
               {name}
             </ThemedText>
-            <ThemedText style={styles.location}>📍 {mockData.location}</ThemedText>
+            <ThemedText style={[styles.location, { color: colors.textMuted }]}>📍 {mockData.location}</ThemedText>
           </View>
         </ThemedView>
 
         {/* Card 2: Vibe/Intent */}
         {vibe && (
-          <ThemedView style={styles.card}>
-            <ThemedText type="defaultSemiBold" style={styles.cardTitle}>
+          <ThemedView style={[styles.card, { backgroundColor: colors.card }]}>
+            <ThemedText type="defaultSemiBold" style={[styles.cardTitle, { color: colors.text }]}>
               Что ищет
             </ThemedText>
             <VibeBadge vibe={vibe} size="large" />
@@ -142,22 +144,22 @@ export default function PublicProfileScreen() {
         )}
 
         {/* Card 3: Bio */}
-        <ThemedView style={styles.card}>
-          <ThemedText type="defaultSemiBold" style={styles.cardTitle}>
+        <ThemedView style={[styles.card, { backgroundColor: colors.card }]}>
+          <ThemedText type="defaultSemiBold" style={[styles.cardTitle, { color: colors.text }]}>
             О себе
           </ThemedText>
-          <ThemedText style={styles.bioText}>{mockData.bio}</ThemedText>
+          <ThemedText style={[styles.bioText, { color: colors.text }]}>{mockData.bio}</ThemedText>
         </ThemedView>
 
         {/* Card 4: Interests */}
-        <ThemedView style={styles.card}>
-          <ThemedText type="defaultSemiBold" style={styles.cardTitle}>
+        <ThemedView style={[styles.card, { backgroundColor: colors.card }]}>
+          <ThemedText type="defaultSemiBold" style={[styles.cardTitle, { color: colors.text }]}>
             Интересы
           </ThemedText>
           <View style={styles.chipsRow}>
             {mockData.interests.map((interest, idx) => (
-              <View key={idx} style={styles.interestChip}>
-                <ThemedText style={styles.interestText}>{interest}</ThemedText>
+              <View key={idx} style={[styles.interestChip, { backgroundColor: colors.border }]}>
+                <ThemedText style={[styles.interestText, { color: colors.text }]}>{interest}</ThemedText>
               </View>
             ))}
           </View>
@@ -165,7 +167,7 @@ export default function PublicProfileScreen() {
 
         {/* Action Button */}
         <Pressable
-          style={styles.actionButton}
+          style={[styles.actionButton, { backgroundColor: colors.accent }]}
           onPress={() => {
             router.push({
               pathname: '/dm/[id]',
@@ -177,7 +179,7 @@ export default function PublicProfileScreen() {
               },
             });
           }}>
-          <ThemedText type="defaultSemiBold" style={styles.actionButtonText}>
+          <ThemedText type="defaultSemiBold" style={[styles.actionButtonText, { color: colors.card }]}>
             💬 Написать сообщение
           </ThemedText>
         </Pressable>

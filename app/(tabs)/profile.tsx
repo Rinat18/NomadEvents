@@ -34,16 +34,19 @@ export default function ProfileScreen() {
   const [friendsCount, setFriendsCount] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
 
-  // Load profile on focus
+  // Load profile on focus: silent refresh if we already have profile
   useFocusEffect(
     React.useCallback(() => {
       void loadAllData();
-    }, [])
+    }, [profile])
   );
 
   async function loadAllData() {
-    setLoading(true);
+    const isInitialLoad = profile === null;
+    if (isInitialLoad) setLoading(true);
+
     await Promise.all([loadSupabaseProfile(), loadLocalProfile(), loadStats()]);
+
     setLoading(false);
   }
 
@@ -87,6 +90,8 @@ export default function ProfileScreen() {
   async function toggleGhostMode(value: boolean) {
     if (!profile) return;
     const updated = await updateProfile({
+      is_ghost: value,
+      ...(value ? { latitude: null, longitude: null } : {}),
       privacy: { ...profile.privacy, ghostMode: value },
     });
     setProfile(updated);
@@ -141,7 +146,7 @@ export default function ProfileScreen() {
     return profile;
   }, [profile, supabaseProfile]);
 
-  if (!displayProfile || loading) {
+  if (!displayProfile) {
     return <LoadingScreen />;
   }
 
@@ -156,16 +161,16 @@ export default function ProfileScreen() {
       <ThemedView style={[styles.card, { backgroundColor: colors.card }]}>
         <View style={styles.photoContainer}>
           {primaryPhoto ? (
-            <Image source={{ uri: primaryPhoto }} style={styles.mainPhoto} contentFit="cover" />
+            <Image source={{ uri: primaryPhoto }} style={[styles.mainPhoto, { borderColor: colors.accent }]} contentFit="cover" />
           ) : (
-            <View style={styles.photoPlaceholder}>
-              <ThemedText type="title" style={styles.photoPlaceholderText}>
+            <View style={[styles.photoPlaceholder, { backgroundColor: colors.border, borderColor: colors.accent }]}>
+              <ThemedText type="title" style={[styles.photoPlaceholderText, { color: colors.accent }]}>
                 {displayProfile.name.charAt(0).toUpperCase()}
               </ThemedText>
             </View>
           )}
           {displayProfile.photos.length > 1 && (
-            <View style={styles.photoCountBadge}>
+            <View style={[styles.photoCountBadge, { backgroundColor: colors.accent }]}>
               <ThemedText style={styles.photoCountText}>+{displayProfile.photos.length - 1}</ThemedText>
             </View>
           )}
@@ -174,7 +179,7 @@ export default function ProfileScreen() {
           <ThemedText type="title" style={[styles.name, { color: colors.text }]}>
             {displayProfile.name}
             {displayProfile.age != null && displayProfile.age > 0 && (
-              <ThemedText style={styles.age}> · {displayProfile.age}</ThemedText>
+              <ThemedText style={[styles.age, { color: colors.accent }]}> · {displayProfile.age}</ThemedText>
             )}
           </ThemedText>
           <ThemedText style={[styles.username, { color: colors.textMuted }]}>{usernameFromName(displayProfile.name)}</ThemedText>
@@ -223,8 +228,8 @@ export default function ProfileScreen() {
           </ThemedText>
           <View style={styles.startersList}>
             {displayProfile.conversationStarters.map((starter, idx) => (
-              <View key={idx} style={styles.starterChip}>
-                <ThemedText style={styles.starterText}>💬 {starter}</ThemedText>
+              <View key={idx} style={[styles.starterChip, { backgroundColor: colors.border }]}>
+                <ThemedText style={[styles.starterText, { color: colors.accent }]}>💬 {starter}</ThemedText>
               </View>
             ))}
           </View>
@@ -239,8 +244,8 @@ export default function ProfileScreen() {
         {displayProfile.interests.length > 0 ? (
           <View style={styles.chipsRow}>
             {displayProfile.interests.map((interest, idx) => (
-              <View key={idx} style={styles.interestChip}>
-                <ThemedText style={styles.interestChipText}>{interest}</ThemedText>
+              <View key={idx} style={[styles.interestChip, { backgroundColor: colors.border }]}>
+                <ThemedText style={[styles.interestChipText, { color: colors.text }]}>{interest}</ThemedText>
               </View>
             ))}
           </View>
@@ -257,8 +262,8 @@ export default function ProfileScreen() {
           </ThemedText>
           <View style={styles.chipsRow}>
             {displayProfile.languages.map((lang, idx) => (
-              <View key={idx} style={styles.langChip}>
-                <ThemedText style={styles.langText}>
+              <View key={idx} style={[styles.langChip, { backgroundColor: colors.border }]}>
+                <ThemedText style={[styles.langText, { color: colors.accent }]}>
                   {lang === 'ru' ? '🇷🇺 Русский' : lang === 'en' ? '🇬🇧 English' : lang === 'ky' ? '🇰🇬 Кыргызча' : lang}
                 </ThemedText>
               </View>
@@ -275,11 +280,11 @@ export default function ProfileScreen() {
           </ThemedText>
           <View style={styles.spotsList}>
             {displayProfile.favoriteSpots.map((spot) => (
-              <View key={spot.id} style={styles.spotItem}>
-                <ThemedText type="defaultSemiBold" style={styles.spotName}>
+              <View key={spot.id} style={[styles.spotItem, { borderBottomColor: colors.border }]}>
+                <ThemedText type="defaultSemiBold" style={[styles.spotName, { color: colors.text }]}>
                   📍 {spot.name}
                 </ThemedText>
-                <ThemedText style={styles.spotAddress}>{spot.address}</ThemedText>
+                <ThemedText style={[styles.spotAddress, { color: colors.textMuted }]}>{spot.address}</ThemedText>
               </View>
             ))}
           </View>
@@ -300,10 +305,10 @@ export default function ProfileScreen() {
               <ThemedText style={[styles.privacyHint, { color: colors.textMuted }]}>Скрыть меня на карте</ThemedText>
             </View>
             <Switch
-              value={displayProfile.privacy.ghostMode}
+              value={displayProfile.is_ghost ?? displayProfile.privacy.ghostMode}
               onValueChange={toggleGhostMode}
-              trackColor={{ false: '#E0E0E0', true: '#FF9F66' }}
-              thumbColor={displayProfile.privacy.ghostMode ? '#FFFFFF' : '#F4F3F4'}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={displayProfile.is_ghost ?? displayProfile.privacy.ghostMode ? colors.card : colors.textMuted}
             />
           </View>
         </View>
@@ -323,8 +328,8 @@ export default function ProfileScreen() {
             <Switch
               value={isDark}
               onValueChange={toggleTheme}
-              trackColor={{ false: '#E0E0E0', true: colors.accent }}
-              thumbColor={isDark ? '#FFFFFF' : '#F4F3F4'}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={isDark ? colors.card : colors.textMuted}
             />
           </View>
         </View>
@@ -344,19 +349,19 @@ export default function ProfileScreen() {
       {/* Edit Profile + Friends: side-by-side */}
       <View style={styles.actionRow}>
         <TouchableOpacity
-          style={styles.editButton}
+          style={[styles.editButton, { borderColor: colors.accent }]}
           onPress={() => router.push('/edit-profile')}
           activeOpacity={0.8}>
-          <ThemedText type="defaultSemiBold" style={styles.editButtonText}>
+          <ThemedText type="defaultSemiBold" style={[styles.editButtonText, { color: colors.accent }]}>
             Edit Profile
           </ThemedText>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.friendsButton}
+          style={[styles.friendsButton, { backgroundColor: colors.accent }]}
           onPress={() => router.push('/friends')}
           activeOpacity={0.8}>
-          <Ionicons name="people" size={20} color="#FFFFFF" />
-          <ThemedText type="defaultSemiBold" style={styles.friendsButtonText}>
+          <Ionicons name="people" size={20} color={colors.card} />
+          <ThemedText type="defaultSemiBold" style={[styles.friendsButtonText, { color: colors.card }]}>
             Friends
           </ThemedText>
         </TouchableOpacity>

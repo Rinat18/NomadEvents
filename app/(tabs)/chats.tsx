@@ -1,12 +1,13 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React from 'react';
-import { Image, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { listDMChats, type DMChat } from '@/lib/local-dms';
 import { listEvents, listMessages, type LocalEvent, type LocalMessage } from '@/lib/local-events';
 import { getOrCreateLocalUserId } from '@/lib/local-user';
+import { useTheme } from '@/lib/theme';
 
 type ChatEvent = {
   event: LocalEvent;
@@ -22,6 +23,7 @@ type SectionData = {
 
 export default function ChatsScreen() {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const router = useRouter();
   const [dmChats, setDmChats] = React.useState<DMChat[]>([]);
   const [chatEvents, setChatEvents] = React.useState<ChatEvent[]>([]);
@@ -134,21 +136,21 @@ export default function ChatsScreen() {
   const isEmpty = dmChats.length === 0 && chatEvents.length === 0;
 
   return (
-    <View style={[styles.container, { paddingTop: 16 + insets.top }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: 16 + insets.top }]}>
       <View style={styles.header}>
-        <ThemedText type="title" style={styles.headerTitle}>
+        <ThemedText type="title" style={[styles.headerTitle, { color: colors.text }]}>
           Чаты
         </ThemedText>
       </View>
 
       {isEmpty && !loading ? (
         <View style={styles.emptyContainer}>
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}>
+          <View style={[styles.emptyState, { backgroundColor: colors.card }]}>
+            <View style={[styles.emptyIcon, { backgroundColor: colors.border }]}>
               <ThemedText style={styles.emptyIconText}>💬</ThemedText>
             </View>
-            <ThemedText style={styles.emptyText}>No active chats yet.</ThemedText>
-            <ThemedText style={styles.emptySubtext}>Join an event or message someone!</ThemedText>
+            <ThemedText style={[styles.emptyText, { color: colors.text }]}>No active chats yet.</ThemedText>
+            <ThemedText style={[styles.emptySubtext, { color: colors.textMuted }]}>Join an event or message someone!</ThemedText>
           </View>
         </View>
       ) : (
@@ -158,14 +160,15 @@ export default function ChatsScreen() {
             if ('event' in item) return `event-${item.event.id}`;
             return `dm-${item.id}`;
           }}
-          onRefresh={load}
-          refreshing={loading}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={load} title="" tintColor={colors.accent} />
+          }
           contentContainerStyle={[styles.listContent, { paddingBottom: 24 + insets.bottom }]}
           showsVerticalScrollIndicator={false}
           stickySectionHeadersEnabled={false}
           renderSectionHeader={({ section }) => (
             <View style={styles.sectionHeader}>
-              <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
+              <ThemedText type="defaultSemiBold" style={[styles.sectionTitle, { color: colors.textMuted }]}>
                 {section.title}
               </ThemedText>
             </View>
@@ -176,7 +179,7 @@ export default function ChatsScreen() {
               const dm = item as DMChat;
               return (
                 <Pressable
-                  style={styles.chatCard}
+                  style={[styles.chatCard, { backgroundColor: colors.card }]}
                   onPress={() =>
                     router.push({
                       pathname: '/dm/[id]',
@@ -188,12 +191,12 @@ export default function ChatsScreen() {
                       },
                     })
                   }>
-                  <View style={styles.leftIcon}>
+                  <View style={[styles.leftIcon, { backgroundColor: colors.border }]}>
                     {dm.userAvatar ? (
                       <Image source={{ uri: dm.userAvatar }} style={styles.leftIconImage} />
                     ) : (
-                      <View style={styles.leftIconPlaceholder}>
-                        <Text style={styles.leftIconPlaceholderText}>
+                      <View style={[styles.leftIconPlaceholder, { backgroundColor: colors.border }]}>
+                        <Text style={[styles.leftIconPlaceholderText, { color: colors.accent }]}>
                           {dm.userName.charAt(0).toUpperCase()}
                         </Text>
                       </View>
@@ -201,18 +204,18 @@ export default function ChatsScreen() {
                   </View>
 
                   <View style={styles.center}>
-                    <ThemedText type="defaultSemiBold" style={styles.chatTitle} numberOfLines={1}>
+                    <ThemedText type="defaultSemiBold" style={[styles.chatTitle, { color: colors.text }]} numberOfLines={1}>
                       {dm.userName}
                     </ThemedText>
-                    <ThemedText style={styles.chatPreview} numberOfLines={1}>
+                    <ThemedText style={[styles.chatPreview, { color: colors.textMuted }]} numberOfLines={1}>
                       {dm.lastMessage || 'Start a conversation'}
                     </ThemedText>
                   </View>
 
                   <View style={styles.right}>
-                    <ThemedText style={styles.chatTime}>{formatTime(dm.updatedAt)}</ThemedText>
-                    <View style={styles.chevron}>
-                      <ThemedText style={styles.chevronText}>›</ThemedText>
+                    <ThemedText style={[styles.chatTime, { color: colors.textMuted }]}>{formatTime(dm.updatedAt)}</ThemedText>
+                    <View style={[styles.chevron, { backgroundColor: colors.border }]}>
+                      <ThemedText style={[styles.chevronText, { color: colors.accent }]}>›</ThemedText>
                     </View>
                   </View>
                 </Pressable>
@@ -229,16 +232,16 @@ export default function ChatsScreen() {
 
               return (
                 <Pressable
-                  style={styles.chatCard}
+                  style={[styles.chatCard, { backgroundColor: colors.card }]}
                   onPress={() => router.push({ pathname: '/event/[id]', params: { id: chatEvent.event.id } })}>
-                  <View style={styles.leftIcon}>
+                  <View style={[styles.leftIcon, { backgroundColor: colors.border }]}>
                     {showEventIcon ? (
                       <Text style={styles.leftIconText}>{chatEvent.event.emoji || '📌'}</Text>
                     ) : lastMessage && lastMessage.author.avatar_url ? (
                       <Image source={{ uri: lastMessage.author.avatar_url }} style={styles.leftIconImage} />
                     ) : lastMessage && lastMessage.author ? (
-                      <View style={styles.leftIconPlaceholder}>
-                        <Text style={styles.leftIconPlaceholderText}>
+                      <View style={[styles.leftIconPlaceholder, { backgroundColor: colors.border }]}>
+                        <Text style={[styles.leftIconPlaceholderText, { color: colors.accent }]}>
                           {lastMessage.author.name.charAt(0).toUpperCase()}
                         </Text>
                       </View>
@@ -248,22 +251,22 @@ export default function ChatsScreen() {
                   </View>
 
                   <View style={styles.center}>
-                    <ThemedText type="defaultSemiBold" style={styles.chatTitle} numberOfLines={1}>
+                    <ThemedText type="defaultSemiBold" style={[styles.chatTitle, { color: colors.text }]} numberOfLines={1}>
                       {chatEvent.event.title}
                     </ThemedText>
-                    <ThemedText style={styles.chatPreview} numberOfLines={1}>
+                    <ThemedText style={[styles.chatPreview, { color: colors.textMuted }]} numberOfLines={1}>
                       {getMessagePreview(chatEvent.lastMessage)}
                     </ThemedText>
                   </View>
 
                   <View style={styles.right}>
                     {chatEvent.lastMessage ? (
-                      <ThemedText style={styles.chatTime}>{formatTime(chatEvent.lastMessage.created_at)}</ThemedText>
+                      <ThemedText style={[styles.chatTime, { color: colors.textMuted }]}>{formatTime(chatEvent.lastMessage.created_at)}</ThemedText>
                     ) : (
-                      <ThemedText style={styles.chatTime}>{formatTime(chatEvent.event.created_at)}</ThemedText>
+                      <ThemedText style={[styles.chatTime, { color: colors.textMuted }]}>{formatTime(chatEvent.event.created_at)}</ThemedText>
                     )}
-                    <View style={styles.chevron}>
-                      <ThemedText style={styles.chevronText}>›</ThemedText>
+                    <View style={[styles.chevron, { backgroundColor: colors.border }]}>
+                      <ThemedText style={[styles.chevronText, { color: colors.accent }]}>›</ThemedText>
                     </View>
                   </View>
                 </Pressable>
@@ -279,38 +282,14 @@ export default function ChatsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFF5F0', // Warm peach background
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 28,
-    color: '#2D1B3D',
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 40,
-  },
-  sectionHeader: {
-    paddingTop: 16,
-    paddingBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    color: '#8B7A9B',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  emptyContainer: {
-    flex: 1,
-    padding: 16,
-  },
+  container: { flex: 1 },
+  header: { paddingHorizontal: 16, paddingBottom: 16 },
+  headerTitle: { fontSize: 28 },
+  listContent: { paddingHorizontal: 16, paddingBottom: 40 },
+  sectionHeader: { paddingTop: 16, paddingBottom: 12 },
+  sectionTitle: { fontSize: 14, textTransform: 'uppercase', letterSpacing: 1 },
+  emptyContainer: { flex: 1, padding: 16 },
   emptyState: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 32,
     alignItems: 'center',
@@ -325,25 +304,15 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#FFE5D4',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
   },
   emptyIconText: { fontSize: 22 },
-  emptyText: {
-    fontSize: 16,
-    color: '#2D1B3D',
-    fontWeight: '600',
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#8B7A9B',
-    textAlign: 'center',
-  },
+  emptyText: { fontSize: 16, fontWeight: '600' },
+  emptySubtext: { fontSize: 14, textAlign: 'center' },
   chatCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 16,
     marginBottom: 12,
@@ -359,57 +328,19 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 18,
-    backgroundColor: '#FFE5D4',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  leftIconText: {
-    fontSize: 24,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  leftIconImage: {
-    width: '100%',
-    height: '100%',
-  },
-  leftIconPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#FFE5D4',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  leftIconPlaceholderText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FF9F66',
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
+  leftIconText: { fontSize: 24, textAlign: 'center', includeFontPadding: false },
+  leftIconImage: { width: '100%', height: '100%' },
+  leftIconPlaceholder: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+  leftIconPlaceholderText: { fontSize: 18, fontWeight: '600', textAlign: 'center', includeFontPadding: false },
   center: { flex: 1, gap: 4 },
   right: { alignItems: 'flex-end', gap: 8 },
-  chatTitle: {
-    fontSize: 16,
-    color: '#2D1B3D',
-  },
-  chatTime: {
-    fontSize: 12,
-    color: '#8B7A9B',
-    marginTop: 2,
-  },
-  chatPreview: {
-    fontSize: 14,
-    color: '#8B7A9B',
-    lineHeight: 18,
-  },
-  chevron: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,159,102,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chevronText: { fontSize: 20, color: '#FF9F66', marginTop: -2 },
+  chatTitle: { fontSize: 16 },
+  chatTime: { fontSize: 12, marginTop: 2 },
+  chatPreview: { fontSize: 14, lineHeight: 18 },
+  chevron: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  chevronText: { fontSize: 20, marginTop: -2 },
 });
